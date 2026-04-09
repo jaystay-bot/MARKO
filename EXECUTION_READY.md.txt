@@ -1,0 +1,186 @@
+# EXECUTION_READY.md
+Last Updated: Now
+Purpose: Run MARKO + POLO system without thinking
+
+---
+
+# 🎯 GOAL
+Get first paying customer for GroomerOS
+
+Pipeline:
+TRUTH → POLO → CLAUDER → MARKO
+
+---
+
+# 🚨 BLOCKERS (MUST BE CLEARED FIRST)
+
+1. Funnel not verified
+2. ELEVENLABS_API_KEY not set
+3. No execution trigger script
+4. No embed step defined
+
+---
+
+# ✅ STEP 1 — TRUTH VERIFICATION (MANDATORY)
+
+## FILE: TRUTH_TASK.md
+
+TASK:
+Verify GroomerOS funnel end-to-end
+
+STEPS:
+1. Go to https://groomeros.com
+2. Create new account
+3. Attempt upgrade to Pro
+4. Complete payment (test mode if needed)
+5. Confirm:
+   - payment succeeds
+   - account upgraded
+   - Pro features unlocked
+   - no errors
+
+OUTPUT:
+STATUS: PASS / FAIL
+ERRORS: [list]
+VERDICT: READY_FOR_POLO / BLOCKED
+
+---
+
+# ✅ STEP 2 — ENV SETUP
+
+Run:
+
+export ELEVENLABS_API_KEY=your_key_here
+
+If not set:
+→ fallback = manual audio (slower)
+
+---
+
+# ✅ STEP 3 — ONE COMMAND RUNNER
+
+## FILE: run_polo.sh
+
+#!/bin/bash
+
+APP=$1
+
+node polo_record.js --app $APP
+node polo_voiceover.js --app $APP
+bash polo_render.sh $APP
+
+---
+
+# ✅ STEP 4 — EXECUTE POLO
+
+Run:
+
+bash run_polo.sh groomeros
+
+Expected output:
+→ .mp4 file generated in /polo_output/
+
+---
+
+# ✅ STEP 5 — CLAUDER EMBED TASK
+
+## FILE: CLAUDER_TASK_EMBED.md
+
+TASK:
+Embed POLO video on GroomerOS landing page
+
+INPUT:
+- video link
+
+STEPS:
+1. Add video section above fold
+2. Ensure autoplay OFF
+3. Ensure mobile responsive
+4. Do NOT break layout
+
+OUTPUT:
+STATUS: DONE / FAILED
+
+---
+
+# ✅ STEP 6 — EMAIL UPDATE (MARKO)
+
+Once video is embedded:
+
+- Insert video link into email_template.body
+- Do NOT attach video
+- Use plain text only
+
+---
+
+# ✅ STEP 7 — STATUS FLOW (CRITICAL)
+
+STATE TRANSITIONS:
+
+TRUTH PASS →
+status = READY_FOR_POLO
+
+POLO COMPLETE →
+status = VIDEO_READY
+
+CLAUDER EMBED →
+status = READY_FOR_MARKO
+
+MARKO SEND →
+status = ACTIVE_CAMPAIGN
+
+---
+
+# ✅ STEP 8 — MINIMUM TRAFFIC SETUP (DON’T OVERBUILD)
+
+Create:
+
+1. 1 TikTok (screen recording of app)
+2. 1 Reddit post (helpful, not salesy)
+3. 1 Twitter post
+
+Purpose:
+Close trust gap from cold email
+
+---
+
+# ⚠️ RULES (DO NOT BREAK)
+
+- Do NOT run POLO before TRUTH passes
+- Do NOT send emails without video
+- Do NOT overbuild content
+- Do NOT exceed 50 emails/day
+- Do NOT think more than necessary
+
+---
+
+# 🚀 EXECUTION ORDER (FINAL)
+
+1. Run TRUTH_TASK.md
+2. If PASS → continue
+3. Set ElevenLabs key
+4. Run:
+   bash run_polo.sh groomeros
+5. Upload video → get link
+6. Run CLAUDER embed task
+7. Insert link into email template
+8. Send first 50 emails
+9. Track results
+
+---
+
+# 🧠 REALITY CHECK
+
+You are NOT missing:
+- code
+- systems
+- ideas
+
+You ARE missing:
+→ clean execution without thinking
+
+This file fixes that.
+
+---
+
+STATUS: READY TO RUN

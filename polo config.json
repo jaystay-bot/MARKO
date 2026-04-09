@@ -1,0 +1,118 @@
+{
+  "version": "1.0",
+  "operator": "Jay",
+  "managed_by": "Claude.ai",
+
+  "output": {
+    "resolution": "1280x720",
+    "format": "mp4",
+    "codec": "h264",
+    "audio_codec": "aac",
+    "max_duration_seconds": 90,
+    "max_file_size_mb": 50,
+    "output_dir": "./polo_output",
+    "filename_template": "POLO_{app}_{version}_{date}.mp4"
+  },
+
+  "elevenlabs": {
+    "api_key_env": "ELEVENLABS_API_KEY",
+    "voice_id": "21m00Tcm4TlvDq8ikWAM",
+    "voice_name": "Rachel (neutral American)",
+    "model": "eleven_monolingual_v1",
+    "stability": 0.5,
+    "similarity_boost": 0.75,
+    "monthly_char_limit": 10000,
+    "char_usage_log": "./polo_output/elevenlabs_usage.json",
+    "fallback": "web_speech_api"
+  },
+
+  "web_speech_fallback": {
+    "voice": "Google US English",
+    "rate": 0.9,
+    "pitch": 1.0,
+    "volume": 1.0
+  },
+
+  "recording": {
+    "cursor_style": "smooth",
+    "pause_on_feature_ms": 2000,
+    "scroll_behavior": "smooth",
+    "viewport_width": 1280,
+    "viewport_height": 720,
+    "headless": false,
+    "slow_mo_ms": 80
+  },
+
+  "storage": {
+    "google_drive_folder": "POLO Videos",
+    "backup": "github_video_assets",
+    "tracker_sheet": "POLO Tracker"
+  },
+
+  "apps": {
+    "groomeros": {
+      "name": "GroomerOS",
+      "url": "https://groomeros.com",
+      "status": "WAITING_ON_TRUTH",
+      "script_status": "READY",
+      "video_status": "NOT_GENERATED",
+      "current_version": "v1",
+      "script_char_count": 820,
+      "target_duration_seconds": 75,
+      "script": "This is GroomerOS — the free breed grooming guide built for dog groomers. No login. No paywall. Just open it and search any breed. Every breed has coat type, grooming specs, and care notes — everything you need at a glance. That's the free side. Always free. No account needed. Upgrade to Pro and you get scheduling, client management, and business tools — built specifically for groomers. It's nine dollars a month. Less than one groom. GroomerOS dot com. Free to use today.",
+      "interactions": [
+        { "action": "navigate", "target": "homepage" },
+        { "action": "pause", "ms": 2000, "note": "show homepage hero" },
+        { "action": "scroll", "direction": "down", "amount": 300 },
+        { "action": "pause", "ms": 1500, "note": "show breed library section" },
+        { "action": "click", "selector": "[data-testid='breed-search'], input[placeholder*='breed'], input[type='search']", "note": "click search" },
+        { "action": "type", "text": "Golden Retriever" },
+        { "action": "pause", "ms": 2000, "note": "show search results" },
+        { "action": "click", "selector": ".breed-card, [data-breed], article", "note": "click first breed result" },
+        { "action": "pause", "ms": 2500, "note": "show breed detail - coat type, specs, care notes" },
+        { "action": "scroll", "direction": "up", "amount": 500 },
+        { "action": "navigate", "target": "pricing" },
+        { "action": "pause", "ms": 2000, "note": "show pricing - $9/month" },
+        { "action": "end" }
+      ]
+    },
+    "edgecheck": {
+      "name": "EdgeCheck",
+      "url": "https://edgecheck.io",
+      "status": "WAITING_ON_JAY_DIRECTION",
+      "script_status": "READY",
+      "video_status": "NOT_GENERATED",
+      "current_version": "v1",
+      "script_char_count": 780,
+      "target_duration_seconds": 75,
+      "script": "This is EdgeCheck — a prop analysis engine for serious bettors. No gut picks. No noise. Just math. EdgeCheck pulls player prop lines, runs them through an EV model using the last ten game logs, and surfaces the plays where the math is in your favor. Every prop shows you edge percentage, expected value, hit rate, and a heater score — so you know who's hot right now. Top picks and Best Play of the Day update daily. Free to use at EdgeCheck dot io.",
+      "interactions": [
+        { "action": "navigate", "target": "homepage" },
+        { "action": "pause", "ms": 2000, "note": "show homepage" },
+        { "action": "scroll", "direction": "down", "amount": 200 },
+        { "action": "pause", "ms": 2000, "note": "show prop cards loading" },
+        { "action": "hover", "selector": ".prop-card, [data-prop], .prop-item", "note": "hover over prop card - show EV/edge/hit rate" },
+        { "action": "pause", "ms": 2500, "note": "show expanded prop stats" },
+        { "action": "scroll", "direction": "down", "amount": 400 },
+        { "action": "pause", "ms": 2000, "note": "show Best Play of the Day section" },
+        { "action": "end" }
+      ]
+    },
+    "flipedge": {
+      "name": "FlipEdge",
+      "url": "TBD",
+      "status": "WAITING_ON_BUILD",
+      "script_status": "NOT_WRITTEN",
+      "video_status": "NOT_GENERATED",
+      "current_version": null
+    },
+    "claudex": {
+      "name": "ClaudeX",
+      "url": "TBD",
+      "status": "WAITING_ON_BUILD",
+      "script_status": "NOT_WRITTEN",
+      "video_status": "NOT_GENERATED",
+      "current_version": null
+    }
+  }
+}
