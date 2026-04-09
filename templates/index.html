@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MARKO</title>
+    <style>
+        body { font-family: monospace; margin: 20px; background: #111; color: #eee; }
+        h1 { color: #0f0; }
+        h2 { color: #0a0; margin-top: 30px; }
+        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+        th, td { border: 1px solid #333; padding: 8px; text-align: left; }
+        th { background: #222; }
+        form { display: inline; margin: 5px; }
+        input[type=text], input[type=number] { background: #222; color: #fff; border: 1px solid #444; padding: 5px; }
+        button { background: #0a0; color: #000; border: none; padding: 8px 15px; cursor: pointer; margin: 2px; }
+        button:hover { background: #0f0; }
+        .action-btn { background: #333; color: #0f0; }
+        .action-btn:hover { background: #444; }
+        .verdict-SCALE { color: #0ff; }
+        .verdict-HOLD { color: #ff0; }
+        .verdict-PIVOT { color: #f80; }
+        .verdict-KILL { color: #f00; }
+        .verdict-BLOCKED { color: #888; }
+        .status-ACTIVE { color: #0f0; }
+        .status-KILLED { color: #f00; }
+        .msg { background: #222; padding: 10px; margin: 10px 0; border-left: 3px solid #0f0; }
+    </style>
+</head>
+<body>
+    <h1>MARKO DASHBOARD</h1>
+
+    {% if message %}
+    <div class="msg">{{ message }}</div>
+    {% endif %}
+
+    <h2>Actions</h2>
+    <form action="/run" method="post">
+        <input type="text" name="name" placeholder="Campaign name" required>
+        <input type="text" name="project" placeholder="Project" required>
+        <button type="submit">Create Campaign</button>
+    </form>
+    <form action="/add_lead" method="post">
+        <input type="text" name="name" placeholder="Name" required>
+        <input type="text" name="email" placeholder="Email" required>
+        <input type="text" name="niche" placeholder="Niche" required>
+        <button type="submit">Add Lead</button>
+    </form>
+    <form action="/send" method="post"><button class="action-btn" type="submit">Send Batch</button></form>
+    <form action="/analyze" method="post"><button class="action-btn" type="submit">Analyze</button></form>
+
+    <form action="/log" method="post" style="margin-top:10px;">
+        <input type="number" name="count" placeholder="Sends" style="width:60px" required>
+        <input type="number" name="opens" placeholder="Opens" style="width:60px" value="0">
+        <input type="number" name="replies" placeholder="Replies" style="width:60px" value="0">
+        <input type="number" name="signups" placeholder="Signups" style="width:60px" value="0">
+        <button type="submit">Log</button>
+    </form>
+
+    <h2>Campaigns ({{ campaigns|length }})</h2>
+    <table>
+        <tr><th>ID</th><th>Name</th><th>Project</th><th>Status</th><th>Sends</th><th>Open%</th><th>Replies</th><th>Signups</th><th>Verdict</th><th>Next</th></tr>
+        {% for c in campaigns %}
+        <tr>
+            <td>{{ c.id }}</td>
+            <td>{{ c.name }}</td>
+            <td>{{ c.project }}</td>
+            <td class="status-{{ c.status }}">{{ c.status }}</td>
+            <td>{{ c.sends }}</td>
+            <td>{{ c.open_rate }}%</td>
+            <td>{{ c.replies }}</td>
+            <td>{{ c.signups }}</td>
+            <td class="verdict-{{ c.verdict }}">{{ c.verdict }}</td>
+            <td>{{ c.next }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Leads ({{ leads|length }})</h2>
+    <table>
+        <tr><th>ID</th><th>Name</th><th>Email</th><th>Niche</th><th>Status</th></tr>
+        {% for l in leads %}
+        <tr>
+            <td>{{ l.id }}</td>
+            <td>{{ l.name }}</td>
+            <td>{{ l.email }}</td>
+            <td>{{ l.niche }}</td>
+            <td>{{ l.status }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <h2>Log (last 10)</h2>
+    <table>
+        <tr><th>Time</th><th>Campaign</th><th>Sends</th><th>Opens</th><th>Replies</th><th>Signups</th></tr>
+        {% for e in log[-10:]|reverse %}
+        <tr>
+            <td>{{ e.timestamp[:16] }}</td>
+            <td>{{ e.campaign_id }}</td>
+            <td>{{ e.sends }}</td>
+            <td>{{ e.opens }}</td>
+            <td>{{ e.replies }}</td>
+            <td>{{ e.signups }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</body>
+</html>

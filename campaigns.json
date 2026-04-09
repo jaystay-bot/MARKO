@@ -1,0 +1,17 @@
+{
+  "campaigns": [
+    {
+      "id": "C001",
+      "name": "GroomerOS-April",
+      "project": "Grooomeros",
+      "status": "ACTIVE",
+      "sends": 28,
+      "open_rate": 30.0,
+      "replies": 1,
+      "signups": 0,
+      "verdict": "HOLD",
+      "last_action": "2026-04-09 08:04",
+      "next": "ANALYZE"
+    }
+  ]
+}

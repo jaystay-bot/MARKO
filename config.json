@@ -1,0 +1,13 @@
+{
+"batch_size": 10,
+"smtp": {
+"host": "smtp.gmail.com",
+"port": 587,
+"use_tls": true
+},
+"email_template": {
+"subject": "Quick question about your grooming work",
+"body": "Hey,\n\nQuick question — when you’re working on a breed, do you ever double check blade lengths or cuts just to be sure you’re doing it right?\n\nI’ve been building something specifically for groomers that helps with breed cuts and also lets you see what you’re actually making per job without guessing.\n\nIf you’re open to it, I can send a quick preview.\n\n– {sender_name}"
+},
+"sender_name": "Jay"
+}

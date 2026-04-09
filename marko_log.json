@@ -1,0 +1,60 @@
+{
+  "log": [
+    {
+      "timestamp": "2026-04-08T21:31:48.371287",
+      "campaign_id": "C001",
+      "sends": 10,
+      "opens": 3,
+      "replies": 1,
+      "signups": 0
+    },
+    {
+      "timestamp": "2026-04-09T08:04:45.712707",
+      "action": "send",
+      "campaign_id": "C001",
+      "lead_id": "L003",
+      "recipient": "pnc.petgrooming@gmail.com",
+      "status": "sent"
+    },
+    {
+      "timestamp": "2026-04-09T08:04:47.350969",
+      "action": "send",
+      "campaign_id": "C001",
+      "lead_id": "L005",
+      "recipient": "pawscienda@gmail.com",
+      "status": "sent"
+    },
+    {
+      "timestamp": "2026-04-09T08:04:48.645483",
+      "action": "send",
+      "campaign_id": "C001",
+      "lead_id": "L006",
+      "recipient": "cosnerscornerstaff@dogkrazy.com",
+      "status": "sent"
+    },
+    {
+      "timestamp": "2026-04-09T08:04:49.775374",
+      "action": "send",
+      "campaign_id": "C001",
+      "lead_id": "L007",
+      "recipient": "ccpetspallc@gmail.com",
+      "status": "sent"
+    },
+    {
+      "timestamp": "2026-04-09T08:04:51.155876",
+      "action": "send",
+      "campaign_id": "C001",
+      "lead_id": "L010",
+      "recipient": "frontdesk@farmersveterinary.com",
+      "status": "sent"
+    },
+    {
+      "timestamp": "2026-04-09T08:04:52.335542",
+      "action": "send",
+      "campaign_id": "C001",
+      "lead_id": "L011",
+      "recipient": "contact@theridgedogshop.com",
+      "status": "sent"
+    }
+  ]
+}
