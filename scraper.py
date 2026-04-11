@@ -204,19 +204,13 @@ def import_leads_from_list(lead_list, niche):
     return added
 
 
-TARGETS = [
-    "https://github.com",
-    "https://pypi.org",
-    "https://rubygems.org",
-    "https://packagist.org",
-    "https://www.apache.org",
-]
-
 CSV_FILE = os.path.join(BASE_DIR, "scraper_results.csv")
 
 
 def fetch_site(url):
     """Fetch a single site and return title, status, SSL, email, phone."""
+    if not url.startswith("http"):
+        url = "https://" + url
     ssl = "yes" if url.startswith("https") else "no"
     try:
         resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
@@ -234,7 +228,6 @@ def fetch_site(url):
         email = "none"
         phone = "none"
     return {
-        "url": url,
         "title": title,
         "status": status,
         "ssl": ssl,
@@ -243,29 +236,59 @@ def fetch_site(url):
     }
 
 
-def run_report():
-    """Fetch target sites, print results, and save to CSV."""
+def run_report(input_csv):
+    """Read input CSV, fetch each site, print results, and save to scraper_results.csv."""
+    rows = []
+    with open(input_csv, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append(row)
+
+    if not rows:
+        print("No rows found in input CSV.")
+        return
+
     results = []
     print("=" * 70)
     print("MARKO SCRAPER — SITE REPORT")
     print("=" * 70)
-    for url in TARGETS:
-        info = fetch_site(url)
-        results.append(info)
-        print(f"\nURL:    {info['url']}")
-        print(f"Title:  {info['title']}")
-        print(f"Status: {info['status']}")
-        print(f"SSL:    {info['ssl']}")
-        print(f"Email:  {info['email']}")
-        print(f"Phone:  {info['phone']}")
+
+    for row in rows:
+        name = row.get("name", "").strip()
+        website = row.get("website", "").strip()
+        if not website:
+            continue
+        info = fetch_site(website)
+        result = {
+            "name": name,
+            "website": website,
+            "title": info["title"],
+            "status": info["status"],
+            "ssl": info["ssl"],
+            "email": info["email"],
+            "phone": info["phone"],
+        }
+        results.append(result)
+        print(f"\nName:    {name}")
+        print(f"Website: {website}")
+        print(f"Title:   {info['title']}")
+        print(f"Status:  {info['status']}")
+        print(f"SSL:     {info['ssl']}")
+        print(f"Email:   {info['email']}")
+        print(f"Phone:   {info['phone']}")
         print("-" * 70)
 
+    fieldnames = ["name", "website", "title", "status", "ssl", "email", "phone"]
     with open(CSV_FILE, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["url", "title", "status", "ssl", "email", "phone"])
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
     print(f"\nResults saved to {CSV_FILE}")
 
 
 if __name__ == "__main__":
-    run_report()
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python scraper.py <input.csv>")
+        sys.exit(1)
+    run_report(sys.argv[1])
