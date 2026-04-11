@@ -1,19 +1,21 @@
 """MARKO Scraper - Lead collection utilities."""
+import csv
 import json
 import os
 import re
 import requests
+from bs4 import BeautifulSoup
 from ddgs import DDGS
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEADS_FILE = os.path.join(BASE_DIR, "leads.json")
 
 EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
-PHONE_REGEX = r'\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}'
+PHONE_REGEX = r'(?<!\d)\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)'
 
 # Filter lists
 SKIP_URLS = ['reddit', 'yelp', 'top10', 'blog', 'article', 'wikipedia', 'facebook', 'twitter', 'instagram', 'linkedin', 'pinterest', 'tiktok', 'youtube']
-SKIP_EMAILS = ['wix', 'sentry', 'noreply', 'no-reply', 'example.com', 'test', 'admin@', 'info@wix', 'support@wix']
+SKIP_EMAILS = ['wix', 'sentry', 'noreply', 'no-reply', 'example.com', 'test', 'admin@', 'info@wix', 'support@wix', 'domain.com', 'placeholder', 'you@', 'user@', 'email@', 'name@']
 SKIP_TITLES = ['top 10', 'top 5', 'top 20', 'best ', 'directory', ' near ', 'r/', 'reddit', 'how to', 'what is', 'guide', 'review']
 
 
@@ -200,3 +202,70 @@ def import_leads_from_list(lead_list, niche):
         add_lead_from_source(name, email, niche, source="import")
         added += 1
     return added
+
+
+TARGETS = [
+    "https://github.com",
+    "https://pypi.org",
+    "https://rubygems.org",
+    "https://packagist.org",
+    "https://www.apache.org",
+]
+
+CSV_FILE = os.path.join(BASE_DIR, "scraper_results.csv")
+
+
+def fetch_site(url):
+    """Fetch a single site and return title, status, SSL, email, phone."""
+    ssl = "yes" if url.startswith("https") else "no"
+    try:
+        resp = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+        status = resp.status_code
+        soup = BeautifulSoup(resp.text, "html.parser")
+        title = soup.title.string.strip() if soup.title and soup.title.string else "N/A"
+        text = resp.text
+        emails = [e for e in re.findall(EMAIL_REGEX, text) if is_valid_email(e)]
+        phones = re.findall(PHONE_REGEX, text)
+        email = emails[0] if emails else "none"
+        phone = phones[0] if phones else "none"
+    except Exception as e:
+        title = "ERROR"
+        status = str(e)
+        email = "none"
+        phone = "none"
+    return {
+        "url": url,
+        "title": title,
+        "status": status,
+        "ssl": ssl,
+        "email": email,
+        "phone": phone,
+    }
+
+
+def run_report():
+    """Fetch target sites, print results, and save to CSV."""
+    results = []
+    print("=" * 70)
+    print("MARKO SCRAPER — SITE REPORT")
+    print("=" * 70)
+    for url in TARGETS:
+        info = fetch_site(url)
+        results.append(info)
+        print(f"\nURL:    {info['url']}")
+        print(f"Title:  {info['title']}")
+        print(f"Status: {info['status']}")
+        print(f"SSL:    {info['ssl']}")
+        print(f"Email:  {info['email']}")
+        print(f"Phone:  {info['phone']}")
+        print("-" * 70)
+
+    with open(CSV_FILE, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["url", "title", "status", "ssl", "email", "phone"])
+        writer.writeheader()
+        writer.writerows(results)
+    print(f"\nResults saved to {CSV_FILE}")
+
+
+if __name__ == "__main__":
+    run_report()
