@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """MARKO Dashboard - Flask UI."""
 from flask import Flask, render_template, request, redirect, url_for, Response, jsonify
+import io
 import json
 import os
+import zipfile
 import commands
 import marko_compliance
 import marko_intel
@@ -44,6 +46,13 @@ def index():
     # Score every lead in-place so the leads table can show HOT/GOOD/WEAK
     commands.annotate_leads(leads)
     call_first = commands.call_queue(limit=10)
+    # N182: re-annotate call_first leads so each has _offer for the Money Lane buttons
+    for _l in call_first:
+        if "_offer" not in _l:
+            _l["_offer"] = marko_intel.recommend_offer(_l)
+    # N182: pipeline total = sum of offer.price for leads in closing window
+    pipeline = commands.pipeline_total(leads,
+                                       statuses=("CONTACTED", "INTERESTED"))
 
     # N084 + N089: attach a personalized cold-call script and a missed-money
     # estimate to each Call First card. Pure functions over existing fields.
@@ -116,6 +125,7 @@ def index():
         resume_state=resume_state,
         money_pipeline=money_pipeline,
         money_mode=money_mode_data,
+        pipeline=pipeline,
         compliance=compliance_state,
         lead_statuses=commands.LEAD_STATUSES,
         max_retries=commands.MAX_RETRIES,
@@ -466,6 +476,198 @@ def retry_run():
     msg = (f"Reset {count} RETRY lead(s) to NEW (cooldown {cooldown}m)"
            if count else "No RETRY leads eligible right now (cooldown / cap / retry-limit)")
     return redirect(url_for("index", message=msg))
+
+
+# ---------- N182: Leak / Mockup / Pitch / Pitch Pack / Mobile Call ----------
+
+def _find_lead_or_404(lead_id):
+    """Return a lead dict by id, or abort 404. Pure read."""
+    leads = load_json(LEADS_FILE).get("leads", [])
+    for l in leads:
+        if l.get("id") == lead_id:
+            return l
+    return None
+
+
+def _sender_name():
+    try:
+        return commands.get_config().get("sender_name", "Jay")
+    except Exception:
+        return "Jay"
+
+
+def _leak_report_md(lead, leaks, offer):
+    """Format the leak report as plain markdown for the Pitch Pack zip."""
+    lines = [f"# Leak Report — {lead.get('name', lead.get('id'))}",
+             "",
+             f"- City: {lead.get('city') or '—'}, {lead.get('state') or ''}",
+             f"- Niche: {lead.get('niche') or '—'}",
+             f"- Phone: {lead.get('phone') or '—'}",
+             f"- Email: {lead.get('email') or '—'}",
+             ""]
+    for section, rows in (("Confirmed", leaks["confirmed"]),
+                          ("Inferred", leaks["inferred"]),
+                          ("Needs human check", leaks["needs_check"])):
+        if rows:
+            lines.append(f"## {section}")
+            for r in rows:
+                lines.append(f"- **{r['label']}** — basis: {r['basis']}")
+            lines.append("")
+    lines.append("## Recommended Offer")
+    lines.append(f"**{offer['kind']}** — ${offer['price']:,} setup"
+                 + (f" + ${offer['monthly']}/mo" if offer.get('monthly') else ""))
+    lines.append(f"_Basis:_ {offer['basis']}")
+    return "\n".join(lines) + "\n"
+
+
+@app.route("/lead/<lead_id>/leak")
+def lead_leak(lead_id):
+    """Lead Leak Panel — confirmed / inferred / needs_check + offer recommendation."""
+    lead = _find_lead_or_404(lead_id)
+    if not lead:
+        return Response(f"lead {lead_id} not found", status=404, mimetype="text/plain")
+    leaks = marko_intel.compute_leaks(lead)
+    offer = marko_intel.recommend_offer(lead)
+    return render_template("leak.html",
+                           lead=lead, lead_id=lead_id,
+                           leaks=leaks, offer=offer,
+                           page_title=f"Leak — {lead.get('name', lead_id)}")
+
+
+@app.route("/lead/<lead_id>/mockup")
+def lead_mockup(lead_id):
+    """Mockup Pitch Panel — renders niche+variant template with whitelisted fields ONLY.
+
+    Truth check: the dict passed to the included mockup template contains only
+    name/city/state/phone/niche. The full lead is exposed for the outer panel
+    chrome (breadcrumb, action buttons) but never to the mockup itself.
+    """
+    lead = _find_lead_or_404(lead_id)
+    if not lead:
+        return Response(f"lead {lead_id} not found", status=404, mimetype="text/plain")
+
+    variant_override = request.args.get("variant")
+    variant = marko_intel.mockup_variant(lead, override=variant_override)
+    slug = marko_intel.niche_key(lead.get("niche"))
+    if slug not in marko_intel.MOCKUP_NICHES:
+        return render_template("mockup_panel.html",
+                               lead=lead, lead_id=lead_id, variant=variant,
+                               niche_slug=slug or "unknown",
+                               mockup_template="mockup/_pending.html",
+                               page_title=f"Mockup — {lead.get('name', lead_id)}",
+                               **marko_intel.whitelisted_lead(lead))
+
+    mockup_template = f"mockup/{slug}_{variant}.html"
+    # Pass ONLY whitelisted fields by spreading the whitelisted dict into the
+    # render context. The outer chrome (`lead`) also still renders but the
+    # mockup include uses `{{ name }}`/`{{ city }}` etc. resolved from the
+    # whitelist below — never `lead.email` or anything else.
+    return render_template("mockup_panel.html",
+                           lead=lead, lead_id=lead_id, variant=variant,
+                           niche_slug=slug, mockup_template=mockup_template,
+                           page_title=f"Mockup — {lead.get('name', lead_id)}",
+                           **marko_intel.whitelisted_lead(lead))
+
+
+@app.route("/lead/<lead_id>/pitch")
+def lead_pitch(lead_id):
+    """One-Click Email Panel. Auto-flips to call-script when email is null."""
+    lead = _find_lead_or_404(lead_id)
+    if not lead:
+        return Response(f"lead {lead_id} not found", status=404, mimetype="text/plain")
+
+    mode_override = request.args.get("mode")
+    if mode_override in ("email", "call"):
+        mode = mode_override
+        if mode == "email" and not lead.get("email"):
+            mode = "call"
+    else:
+        mode = "email" if lead.get("email") else "call"
+
+    sender = _sender_name()
+    config = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
+
+    email = marko_intel.generate_email(lead, kind="intro",
+                                       sender_name=sender, config=config)
+    script = marko_intel.generate_script(lead, sender_name=sender)
+    voicemail = marko_intel.generate_voicemail(lead, sender_name=sender)
+    return render_template("pitch.html",
+                           lead=lead, lead_id=lead_id, mode=mode,
+                           email=email, script=script, voicemail=voicemail,
+                           page_title=f"Pitch — {lead.get('name', lead_id)}")
+
+
+@app.route("/lead/<lead_id>/pitch_pack")
+def lead_pitch_pack(lead_id):
+    """Downloadable ZIP: email.txt + mockup.html + leak_report.md."""
+    lead = _find_lead_or_404(lead_id)
+    if not lead:
+        return Response(f"lead {lead_id} not found", status=404, mimetype="text/plain")
+
+    sender = _sender_name()
+    config = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
+    leaks = marko_intel.compute_leaks(lead)
+    offer = marko_intel.recommend_offer(lead)
+    email = marko_intel.generate_email(lead, kind="intro",
+                                       sender_name=sender, config=config)
+    script = marko_intel.generate_script(lead, sender_name=sender)
+
+    # Render the mockup HTML in isolation so the pack contains a usable preview.
+    variant = marko_intel.mockup_variant(lead)
+    slug = marko_intel.niche_key(lead.get("niche"))
+    wl = marko_intel.whitelisted_lead(lead)
+    mockup_html = ""
+    if slug in marko_intel.MOCKUP_NICHES:
+        try:
+            from flask import render_template_string
+            tpl_path = os.path.join(app.root_path, "templates", "mockup",
+                                    f"{slug}_{variant}.html")
+            with open(tpl_path, "r", encoding="utf-8") as f:
+                mockup_html = render_template_string(f.read(), **wl)
+        except Exception as exc:
+            mockup_html = f"<!-- mockup render failed: {exc} -->"
+
+    email_text = f"To: {lead.get('email') or '(no email on file — use phone)'}\n" \
+                 f"Subject: {email['subject']}\n\n{email['body']}\n\n" \
+                 f"---\nCall opener (if needed):\n{script}\n"
+    report_md = _leak_report_md(lead, leaks, offer)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("email.txt", email_text)
+        zf.writestr("mockup.html",
+                    "<!doctype html><meta charset=utf-8>"
+                    "<title>Mockup</title>" + mockup_html)
+        zf.writestr("leak_report.md", report_md)
+
+    buf.seek(0)
+    safe_name = "".join(c for c in (lead.get("name") or lead_id)
+                        if c.isalnum() or c in "-_")[:40] or lead_id
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition":
+                 f'attachment; filename=pitch_pack_{safe_name}.zip'},
+    )
+
+
+@app.route("/m/lead/<lead_id>")
+def mobile_lead(lead_id):
+    """Mobile Call Mode — top leak, opener, tap-to-dial, 4-button outcome."""
+    lead = _find_lead_or_404(lead_id)
+    if not lead:
+        return Response(f"lead {lead_id} not found", status=404, mimetype="text/plain")
+    leaks = marko_intel.compute_leaks(lead)
+    top = None
+    for bucket in (leaks["confirmed"], leaks["inferred"]):
+        if bucket:
+            top = bucket[0]
+            break
+    script = marko_intel.generate_script(lead, sender_name=_sender_name())
+    return render_template("mobile_call.html",
+                           lead=lead, lead_id=lead_id,
+                           top_leak=top, script=script,
+                           page_title=f"Call — {lead.get('name', lead_id)}")
 
 
 if __name__ == "__main__":

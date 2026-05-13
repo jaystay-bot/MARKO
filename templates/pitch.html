@@ -1,0 +1,64 @@
+{% extends "_layout.html" %}
+{% block content %}
+<div class="breadcrumb"><a href="/">Home</a> · <a href="/lead/{{ lead.id }}/leak">Leak Report</a> · One-Click Pitch</div>
+
+<section class="section">
+  <h2>Pitch · {{ lead.name }}</h2>
+
+  {% if mode == 'email' %}
+    <div class="row" style="margin-bottom:10px;color:var(--muted);font-size:12px;">
+      <span>To: <code>{{ lead.email }}</code></span>
+      <span class="pill">email mode</span>
+      {% if lead.phone %}<a href="?mode=call" style="color:var(--link);text-decoration:none;">Switch to Call Script →</a>{% endif %}
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">Subject:</div>
+    <pre>{{ email.subject }}</pre>
+    <div style="font-size:13px;color:var(--muted);margin:10px 0 4px;">Body:</div>
+    <pre>{{ email.body }}</pre>
+
+    <div class="row" style="margin-top:10px;">
+      <button class="btn" onclick="navigator.clipboard.writeText(document.getElementById('pitchbody').innerText); this.innerText='Copied ✓';">Copy Email</button>
+      <a class="btn muted" href="/lead/{{ lead.id }}/pitch_pack">Export Pitch Pack</a>
+      <form method="post" action="/lead/{{ lead.id }}/contact" style="display:inline;">
+        <button class="btn muted" type="submit">Mark Contacted</button>
+      </form>
+      <form method="post" action="/lead/{{ lead.id }}/disposition/INTERESTED" style="display:inline;">
+        <button class="btn muted" type="submit">Mark Interested</button>
+      </form>
+    </div>
+    <textarea id="pitchbody" style="position:absolute;left:-9999px;">Subject: {{ email.subject }}
+
+{{ email.body }}</textarea>
+
+  {% else %}
+    <div class="row" style="margin-bottom:10px;color:var(--muted);font-size:12px;">
+      {% if lead.email %}
+        <span>To: <code>{{ lead.phone }}</code></span>
+        <span class="pill">call mode</span>
+        <a href="?mode=email" style="color:var(--link);text-decoration:none;">Switch to Email →</a>
+      {% else %}
+        <span>To: <code>{{ lead.phone }}</code></span>
+        <span class="pill">call mode</span>
+        <span style="color:var(--warn);">no email on file — call only</span>
+      {% endif %}
+    </div>
+
+    <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">Opener:</div>
+    <pre>{{ script }}</pre>
+
+    <div style="font-size:13px;color:var(--muted);margin:10px 0 4px;">Voicemail (15 sec):</div>
+    <pre>{{ voicemail }}</pre>
+
+    <div class="row" style="margin-top:10px;">
+      {% if lead.phone %}<a class="btn" href="tel:{{ lead.phone }}">Call Now</a>{% endif %}
+      <a class="btn muted" href="/lead/{{ lead.id }}/pitch_pack">Export Pitch Pack</a>
+      <form method="post" action="/lead/{{ lead.id }}/called" style="display:inline;">
+        <button class="btn muted" type="submit">Mark Called</button>
+      </form>
+      <form method="post" action="/lead/{{ lead.id }}/disposition/INTERESTED" style="display:inline;">
+        <button class="btn muted" type="submit">Mark Interested</button>
+      </form>
+    </div>
+  {% endif %}
+</section>
+{% endblock %}

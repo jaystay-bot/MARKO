@@ -1,0 +1,75 @@
+{% extends "_layout.html" %}
+{% block content %}
+<div class="breadcrumb"><a href="/">Home</a> · Lead {{ lead.id }} · Leak Report</div>
+
+<section class="section">
+  <h2>{{ lead.name }} — Leak Report</h2>
+  <div class="row" style="margin-bottom:10px;color:var(--muted);font-size:12px;">
+    {% if lead.city %}<span>{{ lead.city }}{% if lead.state %}, {{ lead.state }}{% endif %}</span>{% endif %}
+    {% if lead.niche %}<span class="pill">{{ lead.niche }}</span>{% endif %}
+    {% if lead.phone %}<span><code>{{ lead.phone }}</code></span>{% endif %}
+    {% if lead.email %}<span><code>{{ lead.email }}</code></span>{% endif %}
+  </div>
+
+  {% if leaks.confirmed %}
+    <div style="margin-top:6px;color:#4ade80;font-size:12px;letter-spacing:0.05em;">
+      CONFIRMED ({{ leaks.confirmed|length }})
+    </div>
+    {% for row in leaks.confirmed %}
+      <div class="leak-row confirmed">
+        <div class="leak-label">{{ row.label }} <span class="pill confirmed">Confirmed</span></div>
+        <div class="leak-basis">based on: {{ row.basis }}</div>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if leaks.inferred %}
+    <div style="margin-top:12px;color:#ffb627;font-size:12px;letter-spacing:0.05em;">
+      INFERRED ({{ leaks.inferred|length }}) — sanity check before pitching
+    </div>
+    {% for row in leaks.inferred %}
+      <div class="leak-row inferred">
+        <div class="leak-label">{{ row.label }} <span class="pill inferred">Inferred</span></div>
+        <div class="leak-basis">based on: {{ row.basis }}</div>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if leaks.needs_check %}
+    <div style="margin-top:12px;color:var(--muted);font-size:12px;letter-spacing:0.05em;">
+      NEEDS HUMAN CHECK ({{ leaks.needs_check|length }})
+    </div>
+    {% for row in leaks.needs_check %}
+      <div class="leak-row needs">
+        <div class="leak-label">{{ row.label }} <span class="pill needs">Needs human check</span></div>
+        <div class="leak-basis">{{ row.basis }}</div>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if not leaks.confirmed and not leaks.inferred and not leaks.needs_check %}
+    <p style="color:var(--muted);">No leak signals on file. Run a scrape to populate pain_points first.</p>
+  {% endif %}
+
+  <div class="offer-box">
+    <div style="color:var(--muted);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;">Recommended Offer</div>
+    <div class="offer-kind">{{ offer.kind }}</div>
+    <div class="offer-price">
+      {% if offer.price %}${{ '{:,}'.format(offer.price) }} setup{% endif %}
+      {% if offer.monthly %} + ${{ offer.monthly }}/mo{% endif %}
+      {% if not offer.price and not offer.monthly %}Free wedge — no money on the table yet{% endif %}
+    </div>
+    <div class="offer-basis">basis: {{ offer.basis }}</div>
+  </div>
+
+  <div class="row" style="margin-top:14px;">
+    <a class="btn" href="/lead/{{ lead.id }}/mockup">Create Mockup Pitch</a>
+    <a class="btn muted" href="/lead/{{ lead.id }}/pitch">Copy Email</a>
+    {% if lead.phone %}<a class="btn muted" href="tel:{{ lead.phone }}">Call Now</a>{% endif %}
+    <a class="btn muted" href="/lead/{{ lead.id }}/pitch_pack">Export Pitch Pack</a>
+    <form method="post" action="/lead/{{ lead.id }}/disposition/INTERESTED" style="display:inline;">
+      <button class="btn muted" type="submit">Mark Interested</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

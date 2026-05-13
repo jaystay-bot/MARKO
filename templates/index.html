@@ -249,7 +249,13 @@
         {% if message %}<div class="msg">{{ message }}</div>{% endif %}
 
         <section class="section money-section" id="money">
-            <h2>MAKE MONEY TODAY</h2>
+            <h2>MAKE MONEY TODAY
+              {% if pipeline and pipeline.total %}
+              <span class="pill" style="margin-left:10px; background:#0a3a26; color:#4ade80; border-color:#4ade8044; font-weight:600;" title="sum of recommended-offer setup fees across CONTACTED + INTERESTED leads">
+                pipeline ${{ '{:,}'.format(pipeline.total) }} ({{ pipeline.count }} {% if pipeline.count == 1 %}lead{% else %}leads{% endif %})
+              </span>
+              {% endif %}
+            </h2>
             <p class="sub">Six next-action panels driven by real lead data. No fake metrics, no auto-blast. Dry-run is on by default.</p>
             {% if compliance.config_blockers %}
             <div class="compliance-bar bad">
@@ -473,6 +479,9 @@
                     </div>
                     <div>
                         {% if l.website %}<a href="{{ l.website }}" target="_blank" rel="noopener" style="color:var(--link); font-size:12px;">open ↗</a>{% endif %}
+                        <a class="btn muted" href="/lead/{{ l.id }}/leak" title="N182: leak report + recommended offer" style="font-size:12px;">Generate Leak Report</a>
+                        <a class="btn muted" href="/lead/{{ l.id }}/mockup" title="N182: niche mockup preview" style="font-size:12px;">Create Mockup Pitch</a>
+                        <a class="btn muted" href="/lead/{{ l.id }}/pitch_pack" title="N182: zip of email + mockup + leak report" style="font-size:12px;">Export Pitch Pack</a>
                         {% if l.email %}
                         <button type="button" class="btn muted email-preview-btn" data-lead="{{ l.id }}" data-kind="intro" title="preview an intro email (no auto-send)">✉ Preview email</button>
                         {% endif %}

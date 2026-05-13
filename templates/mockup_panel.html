@@ -1,0 +1,32 @@
+{% extends "_layout.html" %}
+{% block content %}
+<div class="breadcrumb"><a href="/">Home</a> · <a href="/lead/{{ lead.id }}/leak">Leak Report</a> · Mockup Pitch</div>
+
+<section class="section">
+  <h2>What we'd build for {{ lead.name }}</h2>
+  <div class="row" style="margin-bottom:10px;color:var(--muted);font-size:12px;gap:14px;">
+    <span>Variant: <span class="pill">{{ variant }}</span></span>
+    <span>Template: <code>mockup/{{ niche_slug }}_{{ variant }}.html</code></span>
+    {% if variant == 'emergency' %}
+      <a href="?variant=booking" style="color:var(--link);text-decoration:none;">switch to booking →</a>
+    {% else %}
+      <a href="?variant=emergency" style="color:var(--link);text-decoration:none;">switch to emergency →</a>
+    {% endif %}
+  </div>
+
+  {% include mockup_template %}
+
+  <p style="color:var(--muted);font-size:11px;text-align:center;margin:14px 0 0;">
+    This mockup uses only public business data (name, city, phone). No fake reviews, no fake metrics, no fabricated quotes.
+  </p>
+
+  <div class="row" style="margin-top:14px;">
+    <a class="btn" href="/lead/{{ lead.id }}/pitch">Copy Email</a>
+    {% if lead.phone %}<a class="btn muted" href="tel:{{ lead.phone }}">Call Now</a>{% endif %}
+    <a class="btn muted" href="/lead/{{ lead.id }}/pitch_pack">Export Pitch Pack</a>
+    <form method="post" action="/lead/{{ lead.id }}/disposition/INTERESTED" style="display:inline;">
+      <button class="btn muted" type="submit">Mark Interested</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

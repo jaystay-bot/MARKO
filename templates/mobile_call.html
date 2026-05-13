@@ -1,0 +1,44 @@
+{% extends "_layout.html" %}
+{% block content %}
+<div class="m-page">
+  <div class="m-card">
+    <div class="m-name">{{ lead.name|truncate(40) }}</div>
+    <div class="m-sub">
+      {% if lead.city %}{{ lead.city }}{% if lead.state %}, {{ lead.state }}{% endif %}{% endif %}
+      {% if lead.niche %} · {{ lead.niche }}{% endif %}
+    </div>
+    {% if lead.phone %}
+      <a class="m-tel" href="tel:{{ lead.phone }}">📞 {{ lead.phone }}</a>
+    {% else %}
+      <div class="m-tel" style="background:var(--panel2);color:var(--muted);">no phone on file</div>
+    {% endif %}
+  </div>
+
+  <div class="m-card">
+    <div class="m-leak">
+      <div class="m-leak-title">TOP LEAK</div>
+      {% if top_leak %}
+        <div>{{ top_leak.label }}</div>
+      {% else %}
+        <div style="color:var(--muted);">No leak signals on file.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="m-card">
+    <div style="color:var(--muted);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:6px;">OPENER</div>
+    <div class="m-opener">{{ script }}</div>
+  </div>
+
+  <div class="m-actions">
+    <form method="post" action="/lead/{{ lead.id }}/disposition/INTERESTED">
+      <button class="btn" type="submit">Mark Interested</button>
+    </form>
+    <a class="btn muted" href="/lead/{{ lead.id }}/pitch?mode=call">Voicemail Script</a>
+    <form method="post" action="/lead/{{ lead.id }}/contact">
+      <button class="btn muted" type="submit">Send Follow-Up</button>
+    </form>
+    <a class="btn muted" href="/">Back to Queue</a>
+  </div>
+</div>
+{% endblock %}
