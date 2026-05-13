@@ -237,29 +237,76 @@
         .call-card .phone { font-family: ui-monospace, Menlo, monospace; }
         .tier-chip { font-size: 11px; padding: 3px 8px; }
         .tier-chip .t-num { background: var(--accent); color: #001b10; padding: 1px 5px; border-radius: 8px; margin-right: 4px; font-weight: 600; }
-        .welcome { background: linear-gradient(90deg, #0e7c5a 0%, #0a6b48 100%); color: #fff; padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; }
-        .welcome .resume-title { font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.9; }
-        .welcome .resume-line { font-size: 13px; opacity: 0.95; }
-        .welcome a, .welcome .btn { color: #001b10; }
-        .pain-tag { display: inline-block; background: #44290b; color: #ffb627; border: 1px solid #ffb62744; padding: 1px 7px; border-radius: 10px; font-size: 11px; margin: 1px 2px; }
-        .touch-badge { display: inline-block; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); padding: 1px 7px; border-radius: 10px; font-size: 10px; }
-        .money-chip { display: inline-block; background: #0a3a26; color: #4ade80; border: 1px solid #4ade8044; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-        /* N121: Money Mode home — 6-card action grid */
-        .money-section { background: linear-gradient(180deg,#0e1a14,#0a0f0c); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
-        .money-section h2 { margin: 0 0 4px; color: var(--accent); letter-spacing: 0.06em; }
-        .money-section .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+        .welcome {
+            background: linear-gradient(135deg, #0e7c5a 0%, #047857 60%, #0a6b48 100%);
+            color: #f0fff8;
+            padding: 16px 20px;
+            border-radius: var(--radius);
+            margin-bottom: 18px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 14px;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 8px 28px -12px rgba(14,124,90,0.6), 0 1px 0 rgba(255,255,255,0.08) inset;
+            border: 1px solid rgba(0,214,143,0.25);
+        }
+        .welcome .resume-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; opacity: 0.85; }
+        .welcome .resume-line { font-size: 14px; opacity: 0.98; margin-top: 4px; }
+        .welcome .btn { background: rgba(255,255,255,0.95); color: #003420; }
+        .welcome .btn:hover { background: #fff; }
+        .welcome .btn.muted { background: rgba(0,0,0,0.25); color: #f0fff8; border: 1px solid rgba(255,255,255,0.2); }
+        .pain-tag { display: inline-flex; align-items: center; background: rgba(255,182,39,0.12); color: var(--warn); border: 1px solid rgba(255,182,39,0.32); padding: 2px 8px; border-radius: 999px; font-size: 11px; margin: 1px 2px; font-weight: 500; }
+        .touch-badge { display: inline-flex; align-items: center; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); padding: 2px 8px; border-radius: 999px; font-size: 10px; }
+        .money-chip { display: inline-flex; align-items: center; background: rgba(0,214,143,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        /* MAKE MONEY TODAY hero */
+        .money-section {
+            background:
+              radial-gradient(600px 200px at 100% 0%, rgba(0,214,143,0.08) 0%, transparent 60%),
+              linear-gradient(180deg, #0e1a14 0%, #0a0f0c 100%);
+            border: 1px solid rgba(0,214,143,0.25);
+            border-radius: var(--radius);
+            padding: 18px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow-elev);
+            position: relative;
+            overflow: hidden;
+        }
+        .money-section h2 { margin: 0 0 6px; color: var(--accent); letter-spacing: 0.14em; font-size: 13px; border-bottom: none; padding-bottom: 0; }
+        .money-section .sub { color: var(--muted); font-size: 12.5px; margin: 0 0 14px; }
+        /* Hero stat strip inside MAKE MONEY TODAY */
+        .money-hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 4px 0 14px; }
+        .money-hero .mh-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .money-hero .mh-card.accent { border-color: rgba(0,214,143,0.4); background: rgba(0,214,143,0.06); }
+        .money-hero .mh-card.warn { border-color: rgba(255,182,39,0.35); background: rgba(255,182,39,0.05); }
+        .money-hero .mh-card.danger { border-color: rgba(255,92,92,0.35); background: rgba(255,92,92,0.06); }
+        .money-hero .mh-num { font-size: 22px; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
+        .money-hero .mh-card.accent .mh-num { color: var(--accent); }
+        .money-hero .mh-card.warn .mh-num { color: var(--warn); }
+        .money-hero .mh-card.danger .mh-num { color: var(--danger); }
+        .money-hero .mh-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+        .money-hero .mh-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
         .money-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; }
-        .money-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
-        .money-card .mc-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
-        .money-card .mc-big { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+        .money-card { background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 6px; transition: border-color 120ms; }
+        .money-card:hover { border-color: var(--border-strong); }
+        .money-card .mc-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.09em; font-weight: 600; }
+        .money-card .mc-big { font-size: 24px; font-weight: 700; color: var(--accent); line-height: 1.1; letter-spacing: -0.01em; }
         .money-card .mc-list { font-size: 12px; color: var(--muted); margin: 0; padding: 0; list-style: none; }
         .money-card .mc-list li { padding: 2px 0; border-bottom: 1px dashed transparent; }
         .money-card a { color: var(--link); text-decoration: none; }
         .money-card a:hover { text-decoration: underline; }
         /* N122: Compliance bar */
-        .compliance-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
-        .compliance-bar.ok { background: #0a3a26; color: #4ade80; border: 1px solid #4ade8044; }
-        .compliance-bar.bad { background: #3a0a0a; color: #ff6b6b; border: 1px solid #ff6b6b44; }
+        .compliance-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 13px; }
+        .compliance-bar.ok { background: rgba(0,214,143,0.08); color: #4ade80; border: 1px solid rgba(74,222,128,0.28); }
+        .compliance-bar.bad { background: rgba(255,92,92,0.08); color: #ff8888; border: 1px solid rgba(255,92,92,0.32); }
         .compliance-bar .cb-icon { font-size: 16px; }
         .compliance-bar .cb-list { color: inherit; opacity: 0.85; font-size: 12px; }
         .deliv-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 6px; margin-top: 8px; font-size: 12px; }
@@ -282,12 +329,55 @@
         .next-btn { font-size: 11px; padding: 2px 8px; }
         .preview-out { background: var(--panel2); padding: 10px; border-radius: 4px; margin-top: 6px; border-left: 3px solid var(--accent); font-size: 12px; white-space: pre-wrap; display: none; }
         .preview-out.show { display: block; }
+        /* Sticky mobile action bar — one-thumb navigation to top action zones */
+        .mobile-bar {
+            display: none;
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            padding: 8px;
+            background: rgba(10,12,14,0.95);
+            backdrop-filter: saturate(160%) blur(10px);
+            -webkit-backdrop-filter: saturate(160%) blur(10px);
+            border-top: 1px solid var(--border);
+            z-index: 50;
+            box-shadow: 0 -8px 24px -8px rgba(0,0,0,0.5);
+        }
+        .mobile-bar-inner { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; max-width: 480px; margin: 0 auto; }
+        .mobile-bar a {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 2px;
+            padding: 8px 4px;
+            min-height: 52px;
+            background: var(--panel2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            text-decoration: none;
+            border-radius: var(--radius-sm);
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            transition: background 100ms, border-color 100ms;
+        }
+        .mobile-bar a.primary { background: var(--accent); color: #00120b; border-color: var(--accent); }
+        .mobile-bar a:active { transform: scale(0.97); }
+        .mobile-bar .mb-ico { font-size: 16px; line-height: 1; }
+        @media (max-width: 768px) {
+            nav { gap: 0; }
+            nav a { padding: 5px 8px; font-size: 11.5px; }
+        }
         @media (max-width: 640px) {
-            main { padding: 10px; }
-            header h1 { font-size: 16px; }
-            .section { padding: 10px; }
-            th, td { padding: 6px; font-size: 12px; }
+            main { padding: 12px; padding-bottom: 92px; }
+            header { padding: 10px 14px; }
+            header h1 { font-size: 14px; letter-spacing: 0.14em; }
+            .section { padding: 12px; border-radius: 8px; }
+            th, td { padding: 6px 8px; font-size: 12px; }
             input, select, button { font-size: 12px; }
+            .mobile-bar { display: block; }
+            /* Lead table feels less hostile on phones */
+            #leads .scroll-x { border: 1px solid var(--border); border-radius: 6px; }
+            /* Tap targets */
+            .call-card button, .call-card .btn, .call-card form button { min-height: 36px; }
+            .money-hero { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -295,16 +385,15 @@
     <header>
         <h1>MARKO</h1>
         <nav>
-            <a href="#home">Home</a>
             <a href="#money">Money Mode</a>
             <a href="/mode/call">Call Mode</a>
             <a href="#callfirst">Call First</a>
-            <a href="#cheatsheet">Cheat Sheet</a>
-            <a href="#scrape">Scrape</a>
+            <a href="#scrape">Find Leads</a>
             <a href="#campaigns">Campaigns</a>
-            <a href="#retry">Retry</a>
             <a href="#leads">Leads</a>
             <a href="#templates">Templates</a>
+            <a href="#cheatsheet">Cheat Sheet</a>
+            <a href="#retry">Retry</a>
             <a href="#activity">Activity</a>
         </nav>
     </header>
@@ -325,6 +414,43 @@
               {% endif %}
             </h2>
             <p class="sub">Six next-action panels driven by real lead data. No fake metrics, no auto-blast. Dry-run is on by default.</p>
+
+            <div class="money-hero" aria-label="Make money today snapshot">
+                <div class="mh-card accent">
+                    <div class="mh-num">{{ money_mode.call_now|length }}</div>
+                    <div class="mh-lbl">Call first</div>
+                    <div class="mh-sub">phone-ready, top tier</div>
+                </div>
+                <div class="mh-card{% if compliance.config_blockers %} danger{% endif %}">
+                    <div class="mh-num">{{ money_mode.email_safe|length }}</div>
+                    <div class="mh-lbl">Email safely</div>
+                    <div class="mh-sub">{% if compliance.config_blockers %}blocked — fix compliance{% else %}compliant + capped{% endif %}</div>
+                </div>
+                <div class="mh-card{% if money_mode.followup|length %} warn{% endif %}">
+                    <div class="mh-num">{{ money_mode.followup|length }}</div>
+                    <div class="mh-lbl">Follow-up</div>
+                    <div class="mh-sub">overdue &gt;48h</div>
+                </div>
+                <div class="mh-card">
+                    <div class="mh-num">{{ money_mode.cap_remaining }}<span style="font-size:12px;color:var(--muted);font-weight:500;"> / {{ money_mode.daily_cap }}</span></div>
+                    <div class="mh-lbl">Daily send cap</div>
+                    <div class="mh-sub">{{ money_mode.sends_today }} sent today</div>
+                </div>
+                {% if top_hot %}
+                <div class="mh-card accent" style="grid-column: span 2;">
+                    <div class="mh-lbl">Next best lead</div>
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:2px;">
+                        <span style="font-size:14px; font-weight:700; line-height:1.2;">{{ top_hot.name|truncate(40) }}</span>
+                        <span class="score-badge score-{{ top_hot._label }}">{{ top_hot._label }} {{ top_hot._score }}</span>
+                    </div>
+                    <div class="mh-sub" style="display:flex; align-items:center; gap:8px;">
+                        <a href="#callfirst" style="color:var(--accent); text-decoration:none;">Open Call First →</a>
+                        {% if top_hot.phone %}<span style="font-family:ui-monospace,Menlo,monospace;">{{ top_hot.phone }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
             {% if compliance.config_blockers %}
             <div class="compliance-bar bad">
                 <span class="cb-icon">⚠</span>
@@ -1023,6 +1149,15 @@
             </div>
         </section>
     </main>
+
+    <nav class="mobile-bar" aria-label="Quick actions">
+        <div class="mobile-bar-inner">
+            <a href="#callfirst" class="primary"><span class="mb-ico">📞</span>Call First</a>
+            <a href="#money"><span class="mb-ico">💰</span>Money</a>
+            <a href="#scrape"><span class="mb-ico">🔎</span>Find</a>
+            <a href="#leads"><span class="mb-ico">📋</span>Leads</a>
+        </div>
+    </nav>
 
     <script>
         // Lead table filtering

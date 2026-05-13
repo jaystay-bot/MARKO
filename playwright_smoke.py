@@ -177,10 +177,15 @@ def run_tests():
                 "section#callfirst details summary"
             ).filter(has_text="Cold-call cheat sheet")
             if sheet_summary.count():
-                sheet_summary.click()
-                # After click, the parent <details> should be open
+                sheet_summary.first.click()
+                # After click, the SPECIFIC parent <details> should be open.
+                # Other <details> coexist in this section (e.g. per-card
+                # .brain-panel), so target the matched summary's own ancestor.
                 is_open = page.evaluate(
-                    "() => document.querySelector('section#callfirst details').open"
+                    "() => { const s = Array.from(document.querySelectorAll("
+                    "'section#callfirst details summary'))"
+                    ".find(el => el.textContent.includes('Cold-call cheat sheet'));"
+                    " return !!(s && s.closest('details') && s.closest('details').open); }"
                 )
                 check("20. cold-call cheat sheet expands on click", is_open)
             else:
