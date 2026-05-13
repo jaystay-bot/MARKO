@@ -50,12 +50,65 @@
     }
   ],
   "campaign_presets": [
-    {"id": "CP001", "name": "GroomerOS RVA", "project": "groomeros", "niche": "dog groomers", "city": "Richmond", "state": "VA"},
-    {"id": "CP002", "name": "BookerMove RVA", "project": "bookermove", "niche": "movers", "city": "Richmond", "state": "VA"},
-    {"id": "CP003", "name": "TalkBot Local", "project": "talkbot", "niche": "med spas", "city": "Richmond", "state": "VA"},
-    {"id": "CP004", "name": "Movers Virginia", "project": "bookermove", "niche": "movers", "city": "Virginia", "state": "VA"},
-    {"id": "CP005", "name": "Roofers RVA", "project": "talkbot", "niche": "roofers", "city": "Richmond", "state": "VA"},
-    {"id": "CP006", "name": "Detailers Local", "project": "talkbot", "niche": "detailing", "city": "Colonial Heights", "state": "VA"}
+    {
+      "id": "CP001",
+      "name": "GroomerOS RVA",
+      "project": "groomeros",
+      "niche": "dog groomers",
+      "city": "Richmond",
+      "state": "VA"
+    },
+    {
+      "id": "CP002",
+      "name": "BookerMove RVA",
+      "project": "bookermove",
+      "niche": "movers",
+      "city": "Richmond",
+      "state": "VA",
+      "pain_angles": [
+        "missed calls — phone-only intake bleeds after-hours jobs",
+        "no online booking / instant quote — leads bounce to the next mover",
+        "slow quote response — beat the lead deadline window (hours, not days)",
+        "deposit drop-off — no easy way to lock the job before competitors call back"
+      ],
+      "call_script_angle": "Hey {{owner}}, this is {{sender_name}} — I was looking at {{business_name}} in {{city}}. Quick question: when a quote request hits at 7pm on a Friday, where does it end up? I've been working on something specifically for movers that catches those after-hours jobs without you picking up. Worth a 60-sec preview?",
+      "outreach_template_id": "T003",
+      "demo_phone": "",
+      "operator_phone": "",
+      "notes": "Pilot offer: BookerMove instant-quote + missed-call recovery. Tier 1-4 (Colonial Heights → Richmond) first, expand outward only after the first 3 closes."
+    },
+    {
+      "id": "CP003",
+      "name": "TalkBot Local",
+      "project": "talkbot",
+      "niche": "med spas",
+      "city": "Richmond",
+      "state": "VA"
+    },
+    {
+      "id": "CP004",
+      "name": "Movers Virginia",
+      "project": "bookermove",
+      "niche": "movers",
+      "city": "Virginia",
+      "state": "VA"
+    },
+    {
+      "id": "CP005",
+      "name": "Roofers RVA",
+      "project": "talkbot",
+      "niche": "roofers",
+      "city": "Richmond",
+      "state": "VA"
+    },
+    {
+      "id": "CP006",
+      "name": "Detailers Local",
+      "project": "talkbot",
+      "niche": "detailing",
+      "city": "Colonial Heights",
+      "state": "VA"
+    }
   ],
   "niche_presets": [
     "movers",
@@ -69,14 +122,46 @@
     "towing"
   ],
   "location_presets": [
-    {"city": "Colonial Heights", "state": "VA", "tier": 1},
-    {"city": "Petersburg", "state": "VA", "tier": 2},
-    {"city": "Chesterfield", "state": "VA", "tier": 3},
-    {"city": "Richmond", "state": "VA", "tier": 4},
-    {"city": "Henrico", "state": "VA", "tier": 5},
-    {"city": "Hopewell", "state": "VA", "tier": 6},
-    {"city": "Virginia", "state": "VA", "tier": 7},
-    {"city": "USA", "state": "US", "tier": 8}
+    {
+      "city": "Colonial Heights",
+      "state": "VA",
+      "tier": 1
+    },
+    {
+      "city": "Petersburg",
+      "state": "VA",
+      "tier": 2
+    },
+    {
+      "city": "Chesterfield",
+      "state": "VA",
+      "tier": 3
+    },
+    {
+      "city": "Richmond",
+      "state": "VA",
+      "tier": 4
+    },
+    {
+      "city": "Henrico",
+      "state": "VA",
+      "tier": 5
+    },
+    {
+      "city": "Hopewell",
+      "state": "VA",
+      "tier": 6
+    },
+    {
+      "city": "Virginia",
+      "state": "VA",
+      "tier": 7
+    },
+    {
+      "city": "USA",
+      "state": "US",
+      "tier": 8
+    }
   ],
   "_note_location_order": "Area expansion order, narrow -> wide. Not GPS distance."
 }
