@@ -33,8 +33,8 @@ def load_leads():
 
 
 def save_leads(data):
-    with open(LEADS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+    # N083: route through commands.save_json so the write is atomic.
+    commands.save_json(LEADS_FILE, data)
 
 
 def is_junk_url(url):
@@ -166,8 +166,9 @@ def _log(entry):
         with open(LOG_FILE, "r") as f:
             data = json.load(f)
         data.setdefault("log", []).append({"timestamp": datetime.now().isoformat(), **entry})
-        with open(LOG_FILE, "w") as f:
-            json.dump(data, f, indent=2)
+        # N083: atomic write via commands.save_json so a crash mid-write
+        # cannot leave the activity log truncated.
+        commands.save_json(LOG_FILE, data)
     except Exception:
         pass
 
