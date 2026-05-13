@@ -6,6 +6,19 @@
 - Skipped: N038 Rust lane (no measured bottleneck), N051–N060 8 parallel agents (theater).
 - Deploy: GitHub→Vercel auto, READY in 12s.
 
+## 2026-05-12 — N262: polish pass (find_lead + orphan wiring + perf snapshot)
+**PASS.** Live: `marko-teal.vercel.app` commit `5a09af2`.
+- 249/249 smoke. 34/34 Playwright (added: welcome partial renders, FCP under 5s).
+- commands.find_lead(lead_id) replaces 7 inline next-generator sites in dashboard.py.
+- templates/partials/_welcome.html: 22 lines extracted from index.html.
+- enrich_batch.py wired as `python cli.py enrich [--write]`.
+- mode_call.html wired via linter's /mode/call?i=N route. Confirmed live.
+- /lead/<id>/close wired by linter; CLOSED_WON/CLOSED_LOST added to LEAD_STATUSES.
+- Perf baseline captured in playwright (FCP 160ms, page 246KB on localhost).
+- Skipped: print() cleanup (operator-useful CLI feedback), Call First partial
+  (~100 lines, linter actively edits — risk > reward), Lighthouse CLI (added
+  unnecessary tool dep; in-Playwright snapshot is the honest alternative).
+
 ## 2026-05-12 — N261: wire marko_brain + mockup catalog
 **PASS.** Live: `marko-teal.vercel.app` commit `534c311` (after `fbafba0` core).
 - 249/249 smoke. 32/32 Playwright.
