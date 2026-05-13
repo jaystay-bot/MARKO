@@ -6,6 +6,21 @@
 - Skipped: N038 Rust lane (no measured bottleneck), N051–N060 8 parallel agents (theater).
 - Deploy: GitHub→Vercel auto, READY in 12s.
 
+## 2026-05-12 — N261: wire marko_brain + mockup catalog
+**PASS.** Live: `marko-teal.vercel.app` commit `534c311` (after `fbafba0` core).
+- 249/249 smoke. 32/32 Playwright.
+- 34 routes (+2: /lead/<id>/brain, /mockup/<slug>/<variant>).
+- marko_brain.py orphan→wired: closability + best_angle + recommended_first_action
+  attached to every Call First card as _brain. Path pill + closability + reason
+  + mockup link render inline.
+- Mockup catalog whitelist (templates/mockup/*) cataloged at import time —
+  path traversal impossible. 10 niche slugs × 2 variants live.
+- niche_to_mockup_slug normalizes messy real-lead niches ("dog groomer",
+  "med spa") to filename slugs ("groomers", "med_spas").
+- best_mockup_variant: high-urgency niches default to emergency, slower to booking.
+- Linter also shipped: enrich_batch.py, mode_call.html, templates.json
+  pretty-print + BookerMove preset enrichments. Preserved.
+
 ## 2026-05-12 — N181+N182+N183+N191+N193: money mode + 5-tier + dispositions + compliance
 **PASS.** Live: `marko-teal.vercel.app` commit `262df07` (CSS patch on top of `c7eff69`).
 - 122/122 smoke (new: voicemail, why_they_buy, /voicemail + /why routes,
