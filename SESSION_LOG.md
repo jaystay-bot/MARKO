@@ -6,6 +6,23 @@
 - Skipped: N038 Rust lane (no measured bottleneck), N051–N060 8 parallel agents (theater).
 - Deploy: GitHub→Vercel auto, READY in 12s.
 
+## 2026-05-12 — N181+N182+N183+N191+N193: money mode + 5-tier + dispositions + compliance
+**PASS.** Live: `marko-teal.vercel.app` commit `262df07` (CSS patch on top of `c7eff69`).
+- 122/122 smoke (new: voicemail, why_they_buy, /voicemail + /why routes,
+  DNC exclusion from queue, set_lead_disposition safety, pipeline_summary).
+- 30/30 Playwright (new: MAKE MONEY TODAY section, 5-tier score CSS used).
+- 26 routes (was 21). New: /lead/<id>/voicemail, /lead/<id>/why,
+  /lead/<id>/disposition/<status>, /lead/<id>/stop, /api/compliance.
+- 5-tier scoring shipped: MONEY (>=90), HOT (>=70), GOOD (>=40), LOW (>=20), DEAD (<20).
+- N193 compliance gate refuses real /send when config blockers present.
+  Dry-run defaults ON.
+- External linter delivered + integrated: marko_compliance.py (full N193),
+  marko_brain.py (N262, currently unwired - candidate for next-N integration),
+  11 niche landing-page mockups (templates/mockup/, currently no route).
+- Skipped: N185 (background workers), N187 (TalkBot identification needs
+  unreliable inference), N190 (cashflow needs manual forms), N195 (needs
+  accumulated reply data), N196-N260 (speculative).
+
 ## 2026-05-12 — N081+N084+N090: intel route + email gen + focus banner
 **PASS.** Live: `marko-teal.vercel.app` commit `eec2e4d`. READY.
 - 84/84 smoke (added 4 new test blocks: money estimate, script, email gen,
