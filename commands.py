@@ -126,6 +126,23 @@ def get_active_campaign():
     return None
 
 
+def find_lead(lead_id):
+    """Return the lead dict with this id, or None. Single source of truth.
+
+    Many dashboard routes share the 'load leads.json, find one by id, or 404'
+    pattern. Centralizing means one place to optimize if we ever move off
+    file-on-disk storage. Returns None on falsy lead_id so callers can pass
+    request args without guarding first.
+    """
+    if not lead_id:
+        return None
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") == lead_id:
+            return l
+    return None
+
+
 def send_email(smtp_config, from_email, password, to_email, subject, body):
     """Send a single email via SMTP. Returns (success, error, smtp_code)."""
     msg = MIMEText(body, "plain")
@@ -1278,3 +1295,78 @@ def cashflow_summary():
         "won_this_month": won_this_month,
         "recent_wins": recent_wins[:5],
     }
+
+
+# ---------- N124: Sequence engine helpers ----------
+#
+# Thin commands-layer wrappers around marko_sequence so the dashboard
+# never imports it directly for write-paths. State machine + transition
+# logic stays pure in marko_sequence; this module owns the disk write.
+
+def apply_sequence_event(lead_id, event):
+    """Apply a sequence event to a lead. Returns True if anything changed.
+
+    Loads leads.json, finds the lead, asks marko_sequence what fields to
+    update, persists. Logs a `sequence_event` audit entry on success.
+    Silently no-ops when the lead is missing or the event doesn't apply.
+    """
+    import marko_sequence as ms
+
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") != lead_id:
+            continue
+        updates = ms.advance_for_event(l, event)
+        if not updates:
+            return False
+        l.update(updates)
+        save_json(LEADS_FILE, data)
+        log_action({
+            "action": "sequence_event",
+            "lead_id": lead_id,
+            "event": event,
+            "step": l.get("sequence_step"),
+            "done": bool(l.get("sequence_done")),
+        })
+        return True
+    return False
+
+
+def sequence_start_for_sent_leads(now=None):
+    """After a real or dry send, mark CONTACTED leads without a sequence
+    as step 1 (EMAIL_SENT). Only touches leads that have no `sequence_step`
+    yet, so this is idempotent and never reverses a later state.
+
+    Returns the count of leads moved into the sequence.
+    """
+    import marko_sequence as ms
+    data = load_json(LEADS_FILE)
+    moved = 0
+    for l in data.get("leads", []):
+        if l.get("status") != "CONTACTED":
+            continue
+        if l.get("sequence_step") or l.get("sequence_done"):
+            continue
+        updates = ms.advance_for_event(l, "email_sent", now=now)
+        if not updates:
+            continue
+        l.update(updates)
+        moved += 1
+    if moved:
+        save_json(LEADS_FILE, data)
+        log_action({"action": "sequence_batch_start", "moved": moved})
+    return moved
+
+
+def sequence_due_count():
+    """How many leads are sequence-due-now (action overdue)."""
+    import marko_sequence as ms
+    leads = load_json(LEADS_FILE).get("leads", [])
+    return ms.overdue_count(leads)
+
+
+def sequence_due_now(limit=10):
+    """Top N leads with sequence actions due, most overdue first."""
+    import marko_sequence as ms
+    leads = load_json(LEADS_FILE).get("leads", [])
+    return ms.due_now(leads, limit=limit)

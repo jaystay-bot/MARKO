@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MARKO</title>
     <style>
+        @font-face {
+            font-family: "InterVar";
+            src: url("/static/InterVariable.woff2") format("woff2-variations"),
+                 url("/static/InterVariable.woff2") format("woff2");
+            font-weight: 100 900;
+            font-style: normal;
+            font-display: swap;
+        }
         :root {
             --bg: #0a0c0e;
             --bg-elev: #10141a;
@@ -256,6 +264,24 @@
         .welcome .btn { background: rgba(255,255,255,0.95); color: #003420; }
         .welcome .btn:hover { background: #fff; }
         .welcome .btn.muted { background: rgba(0,0,0,0.25); color: #f0fff8; border: 1px solid rgba(255,255,255,0.2); }
+
+        .seq-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 4px;
+        }
+        .seq-pill.due  { background: #4a1d1d; color: #ff9c9c; border: 1px solid #ff9c9c44; }
+        .seq-pill.wait { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+        .seq-pill.done { background: #0a3a26; color: #4ade80; border: 1px solid #4ade8044; }
+        .seq-pill.new  { background: var(--panel2); color: var(--muted); border: 1px dashed var(--border); }
+        .seq-actions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .seq-actions form { margin: 0; }
+        .seq-actions button { font-size: 11px; padding: 2px 8px; }
         .pain-tag { display: inline-flex; align-items: center; background: rgba(255,182,39,0.12); color: var(--warn); border: 1px solid rgba(255,182,39,0.32); padding: 2px 8px; border-radius: 999px; font-size: 11px; margin: 1px 2px; font-weight: 500; }
         .touch-badge { display: inline-flex; align-items: center; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); padding: 2px 8px; border-radius: 999px; font-size: 10px; }
         .money-chip { display: inline-flex; align-items: center; background: rgba(0,214,143,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
@@ -579,6 +605,22 @@
                     <ul class="mc-list"><li>Re-scrape to populate pain_points → estimates appear.</li></ul>
                     {% endif %}
                 </div>
+
+                <div class="money-card">
+                    <div class="mc-title">Sequences due now</div>
+                    {% if sequence_due_count %}
+                    <div class="mc-big" style="color:#ff9c9c;">{{ sequence_due_count }}</div>
+                    <ul class="mc-list">
+                        {% for d in sequence_due[:5] %}
+                        <li>{{ (d.lead.name or d.lead.id)|truncate(30) }} — step {{ d.state.step }}/5 ({{ d.state.eta or 'now' }})</li>
+                        {% endfor %}
+                        {% if sequence_due|length > 5 %}<li style="color:var(--muted);">+{{ sequence_due|length - 5 }} more…</li>{% endif %}
+                    </ul>
+                    {% else %}
+                    <div class="mc-big">✓ none</div>
+                    <ul class="mc-list"><li>Nothing in-flight is overdue. Start a new send to begin a sequence.</li></ul>
+                    {% endif %}
+                </div>
                 <div class="money-card">
                     <div class="mc-title">Blockers before sending</div>
                     {% if money_mode.blockers %}
@@ -694,6 +736,15 @@
                 <div class="row1">
                     <div>
                         <span class="score-badge score-{{ l._label }}">{{ l._label }} {{ l._score }}</span>
+                        {% if l._sequence_state %}
+                        {% set _s = l._sequence_state %}
+                        {% if _s.done %}<span class="seq-pill done" title="sequence complete">SEQ ✓</span>
+                        {% elif _s.step == 0 %}<span class="seq-pill new" title="not in sequence yet">SEQ 0</span>
+                        {% elif _s.due %}<span class="seq-pill due" title="{{ _s.hint }} ({{ _s.eta or 'now' }})">SEQ {{ _s.step }}/5 · {{ _s.step_name }}{% if _s.overdue_minutes %} ({{ _s.eta }}){% endif %}</span>
+                        {% else %}<span class="seq-pill wait" title="{{ _s.hint }}">SEQ {{ _s.step }}/5 · {{ _s.eta }}</span>
+                        {% endif %}
+                        {% endif %}
+
                         <span class="biz">{{ l.name }}</span>
                         {% if l.owner %}<span class="meta">— {{ l.owner }}</span>{% endif %}
                         {% if touches %}<span class="touch-badge" title="prior outreach events for this lead">touched {{ touches }}×</span>{% endif %}
@@ -757,7 +808,18 @@
                 </details>
                 {% endif %}
                 <details style="margin-top:6px; background:var(--panel); border-radius:4px; padding:6px 10px;">
-                    <summary style="cursor:pointer; color:var(--muted); font-size:11px;">Closed the deal? Record it</summary>
+                    
+                <details style="margin-top:6px; background:var(--panel); border-radius:4px; padding:6px 10px;">
+                    <summary style="cursor:pointer; color:var(--muted); font-size:11px;">Sequence: log a step</summary>
+                    <div class="seq-actions">
+                        <form action="/lead/{{ l.id }}/sequence/email_sent" method="post"><button class="btn muted" type="submit">📨 Email sent</button></form>
+                        <form action="/lead/{{ l.id }}/sequence/voicemail" method="post"><button class="btn muted" type="submit">📞 Voicemail left</button></form>
+                        <form action="/lead/{{ l.id }}/sequence/followup_sent" method="post"><button class="btn muted" type="submit">↪ Follow-up sent</button></form>
+                        <form action="/lead/{{ l.id }}/sequence/final_bump_sent" method="post"><button class="btn muted" type="submit">🛑 Final bump sent</button></form>
+                        <form action="/lead/{{ l.id }}/sequence/reset" method="post"><button class="btn muted" type="submit">↺ Reset</button></form>
+                    </div>
+                </details>
+<summary style="cursor:pointer; color:var(--muted); font-size:11px;">Closed the deal? Record it</summary>
                     <form action="/lead/{{ l.id }}/close" method="post" style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                         <input type="number" name="mrr_value" min="0" step="1" placeholder="$/mo" style="width:100px;">
                         <button type="submit" name="outcome" value="won" style="font-size:11px;">Closed WON</button>

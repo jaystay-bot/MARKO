@@ -9,6 +9,8 @@ import commands
 import marko_brain
 import marko_compliance
 import marko_intel
+import marko_sequence
+
 import scraper
 
 app = Flask(__name__)
@@ -93,6 +95,9 @@ def index():
     except Exception:
         sender_name = "Jay"
     for _l in call_first:
+        _l["_script"] = marko_intel.generate_script(_l, sender_name=sender_name)
+    for _l in call_first:
+        _l["_sequence_state"] = marko_sequence.state_for(_l)
         _l["_script"] = marko_intel.generate_script(_l, sender_name=sender_name)
         _l["_missed_money"] = marko_intel.estimate_missed_money(_l)
         # N261: brain bundle = recommended action + closability + best angle.
@@ -183,7 +188,9 @@ def index():
         pipeline=pipeline,
         compliance=compliance_state,
         compliance_config=config_for_view,
-        cashflow=cashflow,
+        cashflow=cashflow,        sequence_due=commands.sequence_due_now(limit=10),
+        sequence_due_count=commands.sequence_due_count(),
+
         lead_statuses=commands.LEAD_STATUSES,
         max_retries=commands.MAX_RETRIES,
         daily_cap=commands.DAILY_SEND_CAP,
@@ -229,6 +236,14 @@ def send():
             return redirect(url_for("index", message=msg))
 
     result = commands.marko_send(dry_run=dry) or "Batch sent"
+    # N124: after a real send, mark each newly-CONTACTED lead as sequence step 1.
+    # Idempotent; dry runs leave the sequence alone.
+    if not dry:
+        try:
+            commands.sequence_start_for_sent_leads()
+        except Exception:
+            pass
+
     if dry:
         result = result + " (dry run)"
     return redirect(url_for("index", message=result))
@@ -300,6 +315,16 @@ def lead_disposition(lead_id, disposition):
     """
     disp = (disposition or "").upper()
     ok = commands.set_lead_disposition(lead_id, disp)
+    # N124: advance the outbound sequence if this disposition maps to an event.
+    if ok:
+        try:
+            import marko_sequence as _ms
+            ev = _ms.DISPOSITION_TO_EVENT.get(disp)
+            if ev:
+                commands.apply_sequence_event(lead_id, ev)
+        except Exception:
+            pass
+
     if ok:
         msg = f"Lead {lead_id} → {disp}"
     else:
@@ -340,6 +365,13 @@ def lead_close(lead_id):
     mrr_raw = request.form.get("mrr_value") or "0"
     note = request.form.get("note") or None
     ok = commands.set_lead_closed(lead_id, won=won, mrr_value=mrr_raw, note=note)
+    # N124: close events end the sequence regardless of step.
+    if ok:
+        try:
+            commands.apply_sequence_event(lead_id, "booked" if won else "not_interested")
+        except Exception:
+            pass
+
     if ok:
         if won:
             try:
@@ -398,6 +430,51 @@ def mode_call():
         next_idx=min(len(queue) - 1, idx + 1),
         sender_name=sender_name,
     )
+
+
+
+
+@app.route("/lead/<lead_id>/sequence/<event>", methods=["POST"])
+def lead_sequence_event(lead_id, event):
+    """N124: explicit sequence transition.
+
+    event in marko_sequence.VALID_EVENTS. Used by the dashboard for
+    operator-driven steps that aren't captured by dispositions —
+    primarily Email Sent / Followup Sent / Final Bump Sent / Reset.
+    """
+    ev = (event or "").lower().strip()
+    if ev not in marko_sequence.VALID_EVENTS:
+        return redirect(url_for("index",
+            message=f"Unknown sequence event: {ev}"))
+    ok = commands.apply_sequence_event(lead_id, ev)
+    if ok:
+        msg = f"Lead {lead_id} sequence → {ev}"
+    else:
+        msg = f"Lead {lead_id} not found or event did not apply"
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/api/sequence/due")
+def api_sequence_due():
+    """N124: JSON snapshot of leads with sequence actions due now."""
+    due = commands.sequence_due_now(limit=25)
+    return jsonify({
+        "count": len(due),
+        "leads": [
+            {
+                "id":             d["lead"].get("id"),
+                "name":           d["lead"].get("name"),
+                "phone":          d["lead"].get("phone"),
+                "email":          d["lead"].get("email"),
+                "step":           d["state"]["step"],
+                "step_name":      d["state"]["step_name"],
+                "hint":           d["state"]["hint"],
+                "overdue_minutes": d["state"]["overdue_minutes"],
+                "next_at":        d["state"]["next_at"],
+            }
+            for d in due
+        ],
+    })
 
 
 @app.route("/api/compliance")
@@ -460,8 +537,7 @@ def lead_intel(lead_id):
     a 'soft' cold-call script. Pure read; no mutation. Used by the UI for an
     intel panel and by headless tooling that wants the raw numbers.
     """
-    leads = load_json(LEADS_FILE).get("leads", [])
-    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    lead = commands.find_lead(lead_id)
     if not lead:
         return jsonify({"error": "lead not found", "id": lead_id}), 404
 
@@ -503,8 +579,7 @@ def lead_email(lead_id, kind):
     kind ∈ {intro, followup, breakup}. Never sends — UI surfaces this for
     operator copy/edit/paste workflows.
     """
-    leads = load_json(LEADS_FILE).get("leads", [])
-    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    lead = commands.find_lead(lead_id)
     if not lead:
         return jsonify({"error": "lead not found", "id": lead_id}), 404
 
@@ -522,8 +597,7 @@ def lead_email(lead_id, kind):
 @app.route("/lead/<lead_id>/voicemail")
 def lead_voicemail(lead_id):
     """N183: short voicemail script for one lead. JSON; never auto-sends."""
-    leads = load_json(LEADS_FILE).get("leads", [])
-    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    lead = commands.find_lead(lead_id)
     if not lead:
         return jsonify({"error": "lead not found", "id": lead_id}), 404
     sender = "Jay"
@@ -540,8 +614,7 @@ def lead_voicemail(lead_id):
 @app.route("/lead/<lead_id>/why")
 def lead_why(lead_id):
     """N191: structured 'why they buy' angle for one lead. JSON."""
-    leads = load_json(LEADS_FILE).get("leads", [])
-    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    lead = commands.find_lead(lead_id)
     if not lead:
         return jsonify({"error": "lead not found", "id": lead_id}), 404
     return jsonify(marko_intel.why_they_buy(lead))
@@ -555,8 +628,7 @@ def lead_brain(lead_id):
     + the suggested mockup (slug + variant), all derived from existing fields.
     Pure read; no mutation.
     """
-    leads = load_json(LEADS_FILE).get("leads", [])
-    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    lead = commands.find_lead(lead_id)
     if not lead:
         return jsonify({"error": "lead not found", "id": lead_id}), 404
 
@@ -615,8 +687,7 @@ def show_mockup(slug, variant):
     lead_id = request.args.get("lead_id") or ""
     lead = None
     if lead_id:
-        leads = load_json(LEADS_FILE).get("leads", [])
-        lead = next((l for l in leads if l.get("id") == lead_id), None)
+        lead = commands.find_lead(lead_id)
 
     if lead:
         name = lead.get("name") or "Your Business"
@@ -704,8 +775,7 @@ def template_preview(template_id):
     lead_id = request.args.get("lead_id")
     lead = None
     if lead_id:
-        leads = load_json(LEADS_FILE).get("leads", [])
-        lead = next((l for l in leads if l.get("id") == lead_id), None)
+        lead = commands.find_lead(lead_id)
     if lead is None:
         lead = {"name": "Sample Business", "city": "Richmond", "state": "VA",
                 "owner": "there", "phone": "555-123-4567", "niche": "movers"}
