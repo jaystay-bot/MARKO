@@ -2,11 +2,24 @@
 {% block content %}
 <div class="m-page">
   <div class="m-card">
-    <div class="m-name">{{ lead.name|truncate(40) }}</div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+      <div class="m-name" style="flex:1 1 auto;">{{ lead.name|truncate(40) }}</div>
+      {% if sequence_state %}
+        {% set _s = sequence_state %}
+        {% if _s.done %}<span class="seq-pill done" title="sequence complete">SEQ ✓</span>
+        {% elif _s.step == 0 %}<span class="seq-pill new" title="not in sequence yet">SEQ 0</span>
+        {% elif _s.due %}<span class="seq-pill due" title="{{ _s.hint }} ({{ _s.eta or 'now' }})">SEQ {{ _s.step }}/5 · DUE{% if _s.overdue_minutes %} {{ _s.eta }}{% endif %}</span>
+        {% else %}<span class="seq-pill wait" title="{{ _s.hint }}">SEQ {{ _s.step }}/5 · {{ _s.eta }}</span>
+        {% endif %}
+      {% endif %}
+    </div>
     <div class="m-sub">
       {% if lead.city %}{{ lead.city }}{% if lead.state %}, {{ lead.state }}{% endif %}{% endif %}
       {% if lead.niche %} · {{ lead.niche }}{% endif %}
     </div>
+    {% if sequence_state and not sequence_state.done and sequence_state.hint %}
+      <div class="m-sub" style="margin-top:6px;color:var(--text);opacity:0.85;">{{ sequence_state.hint }}</div>
+    {% endif %}
     {% if lead.phone %}
       <a class="m-tel" href="tel:{{ lead.phone }}">📞 {{ lead.phone }}</a>
     {% else %}
@@ -39,6 +52,17 @@
       <button class="btn muted" type="submit">Send Follow-Up</button>
     </form>
     <a class="btn muted" href="/">Back to Queue</a>
+  </div>
+
+  <div class="m-card" style="margin-top:12px;">
+    <div style="color:var(--muted);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">SEQUENCE — LOG A STEP</div>
+    <div class="seq-actions">
+      <form action="/lead/{{ lead.id }}/sequence/email_sent" method="post"><button class="btn muted" type="submit">📨 Email sent</button></form>
+      <form action="/lead/{{ lead.id }}/sequence/voicemail" method="post"><button class="btn muted" type="submit">📞 Voicemail</button></form>
+      <form action="/lead/{{ lead.id }}/sequence/followup_sent" method="post"><button class="btn muted" type="submit">↪ Follow-up</button></form>
+      <form action="/lead/{{ lead.id }}/sequence/final_bump_sent" method="post"><button class="btn muted" type="submit">🛑 Final bump</button></form>
+      <form action="/lead/{{ lead.id }}/sequence/reset" method="post" style="grid-column:1 / -1;"><button class="btn muted" type="submit">↺ Reset sequence</button></form>
+    </div>
   </div>
 </div>
 {% endblock %}

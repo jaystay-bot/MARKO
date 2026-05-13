@@ -103,6 +103,17 @@
   .mk-cta-phone{background:#fff;color:#0e7c5a;border:2px solid #0e7c5a;font-size:13px}
   .mk-feat{font-size:12px;color:#444;margin:4px 0 8px;padding-left:4px}
   .mk-foot{font-size:10px;color:#999;text-align:center;margin-top:14px;border-top:1px solid #eee;padding-top:8px}
+  /* Sequence pill + log buttons — shared with desktop Call First cards */
+  .seq-pill{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;
+            font-size:11px;font-weight:600;letter-spacing:0.02em;line-height:1.5;
+            font-family:ui-monospace,Menlo,monospace}
+  .seq-pill.due{background:rgba(255,92,92,0.12);color:#ff9c9c;border:1px solid rgba(255,92,92,0.3)}
+  .seq-pill.wait{background:var(--panel2);color:var(--muted);border:1px solid var(--border)}
+  .seq-pill.done{background:rgba(74,222,128,0.12);color:#4ade80;border:1px solid rgba(74,222,128,0.3)}
+  .seq-pill.new{background:var(--panel2);color:var(--muted);border:1px dashed var(--border)}
+  .seq-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+  .seq-actions form{margin:0}
+  .seq-actions .btn{width:100%;min-height:40px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:4px}
   /* Mobile call mode — one-thumb operator panel */
   .m-page{max-width:480px;margin:0 auto;padding:14px;padding-bottom:24px}
   .m-card{background:linear-gradient(180deg,var(--panel) 0%,var(--bg-elev) 100%);

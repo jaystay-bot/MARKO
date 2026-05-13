@@ -313,6 +313,22 @@ def run_tests():
                   fcp < 5000, f"timing={timing}")
             print(f"     perf snapshot: {timing}")
 
+            # 33-34. N266: perf BUDGET — tighter ceilings that fail CI on regression.
+            # Localhost baseline at landing was ~190ms FCP, ~250KB transfer.
+            # Budgets give ~7-8x headroom on FCP, ~1.6x on transfer.
+            PERF_BUDGET_FCP_MS = 1500
+            PERF_BUDGET_TRANSFER_KB = 400
+            check(f"33. FCP budget under {PERF_BUDGET_FCP_MS}ms (got {fcp}ms)",
+                  0 < fcp < PERF_BUDGET_FCP_MS,
+                  f"FCP {fcp}ms exceeds budget {PERF_BUDGET_FCP_MS}ms — investigate "
+                  f"new render-blocking work; full timing={timing}")
+            transfer_kb = timing.get("transfer_kb") or 0
+            check(f"34. Transfer budget under {PERF_BUDGET_TRANSFER_KB}KB "
+                  f"(got {transfer_kb}KB)",
+                  0 < transfer_kb < PERF_BUDGET_TRANSFER_KB,
+                  f"transfer {transfer_kb}KB exceeds budget {PERF_BUDGET_TRANSFER_KB}KB "
+                  f"— check for new bundled assets / inline CSS bloat; full timing={timing}")
+
         finally:
             browser.close()
 

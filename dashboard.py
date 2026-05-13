@@ -53,8 +53,9 @@ LOG_FILE = os.path.join(BASE_DIR, "marko_log.json")
 
 
 def load_json(filepath):
-    with open(filepath, "r") as f:
-        return json.load(f)
+    # N271: route through the storage abstraction so local + kv backends
+    # both work without changing every call site in this file.
+    return commands.load_json(filepath)
 
 
 @app.route("/")
@@ -534,6 +535,39 @@ def sequence_send_all_pending():
         if len(result["errors"]) > 1:
             msg += f" (+{len(result['errors']) - 1} more)"
     return redirect(url_for("index", message=msg))
+
+
+
+
+@app.route("/lead/<lead_id>/timeline")
+def lead_timeline_view(lead_id):
+    """N197: full event timeline for one lead."""
+    lead = commands.find_lead(lead_id) if hasattr(commands, "find_lead") else None
+    if lead is None:
+        # Fall back to manual lookup if find_lead helper isn't there.
+        leads = load_json(LEADS_FILE).get("leads", [])
+        lead = next((l for l in leads if l.get("id") == lead_id), None)
+    if lead is None:
+        return render_template("lead_timeline.html", lead=None, events=[],
+                               lead_id=lead_id), 404
+    events = commands.lead_timeline(lead_id)
+    return render_template("lead_timeline.html",
+                           lead=lead, events=events, lead_id=lead_id)
+
+
+@app.route("/recap")
+def recap_view():
+    """N197: daily activity recap. ?date=YYYY-MM-DD for historical, default today."""
+    date_str = request.args.get("date") or None
+    recap = commands.daily_recap(date_str)
+    return render_template("recap.html", recap=recap)
+
+
+@app.route("/api/recap")
+def api_recap():
+    """N197: JSON daily recap. ?date=YYYY-MM-DD optional."""
+    date_str = request.args.get("date") or None
+    return jsonify(commands.daily_recap(date_str))
 
 
 @app.route("/api/compliance")
@@ -1047,9 +1081,14 @@ def mobile_lead(lead_id):
             top = bucket[0]
             break
     script = marko_intel.generate_script(lead, sender_name=_sender_name())
+    # N267: surface the same sequence state the desktop Call First cards
+    # show, so mobile call mode has parity. Pure read — no mutation.
+    import marko_sequence
+    sequence_state = marko_sequence.state_for(lead)
     return render_template("mobile_call.html",
                            lead=lead, lead_id=lead_id,
                            top_leak=top, script=script,
+                           sequence_state=sequence_state,
                            page_title=f"Call — {lead.get('name', lead_id)}")
 
 
