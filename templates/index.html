@@ -157,6 +157,17 @@
         .score-DEAD { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
         .call-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 6px; }
         .call-card.priority { border-left: 3px solid var(--accent); }
+        .brain-panel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
+        .brain-path { padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; background: var(--panel2); color: var(--text); }
+        .brain-path-CALL_FIRST { background: #c2410c; color: #fff; }
+        .brain-path-EMAIL_FIRST { background: #0e7c5a; color: #fff; }
+        .brain-path-SEND_MOCKUP_FIRST { background: #4c1d95; color: #fff; }
+        .brain-path-FOLLOW-UP_LATER { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+        .brain-clos { font-family: ui-monospace, Menlo, monospace; color: var(--muted); font-size: 11px; }
+        .brain-action { color: var(--text); }
+        .brain-when { color: var(--muted); }
+        .brain-mockup { font-size: 11px; padding: 2px 8px; margin-left: auto; }
+        .brain-reason { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
         .focus-banner { background: linear-gradient(90deg, #c2410c 0%, #8a2c08 100%); color: #fff; padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; }
         .focus-title { font-weight: 700; letter-spacing: 0.05em; font-size: 14px; }
         .focus-meta { font-size: 12px; opacity: 0.9; }
@@ -509,6 +520,18 @@
                     <span class="money-chip" title="Estimated monthly revenue leak from observed weaknesses · {{ l._missed_money.note }}">~${{ '{:,}'.format(l._missed_money.low) }}-${{ '{:,}'.format(l._missed_money.high) }}/mo lost<span class="conf">{{ l._missed_money.confidence }} conf</span></span>
                     {% endif %}
                 </div>
+                {% endif %}
+                {% if l._brain %}
+                <div class="brain-panel" title="Decision derived from public signals only — closability + recommended action. Pure read.">
+                    <span class="brain-path brain-path-{{ l._brain.path|replace(' ', '_') }}">🧠 {{ l._brain.path }}</span>
+                    <span class="brain-clos" title="closability: 0.0 (cold) → 1.0 (hot today)">closability {{ '%.2f'|format(l._brain.closability) }}</span>
+                    <span class="brain-action">{{ l._brain.action }}</span>
+                    <span class="brain-when">· by {{ l._brain.by_when }}</span>
+                    {% if l._brain.mockup_slug %}
+                    <a class="btn muted brain-mockup" href="/mockup/{{ l._brain.mockup_slug }}/{{ l._brain.mockup_variant }}?lead_id={{ l.id }}" target="_blank" rel="noopener" title="Open {{ l._brain.mockup_slug }} {{ l._brain.mockup_variant }} mockup with this lead's name/city">📱 Mockup ↗</a>
+                    {% endif %}
+                </div>
+                <div class="brain-reason">why: {{ l._brain.reason }}</div>
                 {% endif %}
                 {% if l._script %}
                 <div class="script-block">

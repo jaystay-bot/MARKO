@@ -6,6 +6,7 @@ import json
 import os
 import zipfile
 import commands
+import marko_brain
 import marko_compliance
 import marko_intel
 import scraper
@@ -13,6 +14,37 @@ import scraper
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
+# N261: Mockup catalog built once at import time from templates/mockup/*.
+# Acts as a whitelist so the /mockup route can't be tricked into rendering
+# templates outside this directory (no path traversal).
+_MOCKUP_DIR = os.path.join(BASE_DIR, "templates", "mockup")
+
+
+def _build_mockup_catalog():
+    """Scan templates/mockup/*.html and return {slug: {variant: filename}}.
+
+    Filenames are <slug>_<variant>.html (e.g. movers_booking.html).
+    Files starting with underscore (e.g. _booking_base.html) are skipped.
+    The rightmost underscore splits slug from variant so multi-word slugs
+    like 'med_spas' or 'auto_shops' resolve correctly.
+    """
+    catalog = {}
+    if not os.path.isdir(_MOCKUP_DIR):
+        return catalog
+    for fname in os.listdir(_MOCKUP_DIR):
+        if not fname.endswith(".html") or fname.startswith("_"):
+            continue
+        stem = fname[:-5]  # strip .html
+        if "_" not in stem:
+            continue
+        slug, variant = stem.rsplit("_", 1)
+        catalog.setdefault(slug, {})[variant] = fname
+    return catalog
+
+
+MOCKUP_CATALOG = _build_mockup_catalog()
 CAMPAIGNS_FILE = os.path.join(BASE_DIR, "campaigns.json")
 LEADS_FILE = os.path.join(BASE_DIR, "leads.json")
 LOG_FILE = os.path.join(BASE_DIR, "marko_log.json")
@@ -63,6 +95,21 @@ def index():
     for _l in call_first:
         _l["_script"] = marko_intel.generate_script(_l, sender_name=sender_name)
         _l["_missed_money"] = marko_intel.estimate_missed_money(_l)
+        # N261: brain bundle = recommended action + closability + best angle.
+        # Pure read; no mutation of the on-disk lead record.
+        _brain = marko_brain.recommended_first_action(_l)
+        _brain["closability"] = marko_brain.closability_score(_l)
+        _brain["best_angle"] = marko_brain.best_angle(_l)
+        # Mockup hint: niche -> slug (or None) + best variant for that niche.
+        _slug = marko_brain.niche_to_mockup_slug(_l.get("niche"))
+        if _slug and _slug in MOCKUP_CATALOG:
+            _variant = marko_brain.best_mockup_variant(_l.get("niche"))
+            if _variant not in MOCKUP_CATALOG[_slug]:
+                # Fall back to whatever variant exists for that slug.
+                _variant = next(iter(MOCKUP_CATALOG[_slug].keys()))
+            _brain["mockup_slug"] = _slug
+            _brain["mockup_variant"] = _variant
+        _l["_brain"] = _brain
 
     # N050: touch count per lead (any send/called/retry_status event in log)
     touch_counts = {}
@@ -418,6 +465,95 @@ def lead_why(lead_id):
     if not lead:
         return jsonify({"error": "lead not found", "id": lead_id}), 404
     return jsonify(marko_intel.why_they_buy(lead))
+
+
+@app.route("/lead/<lead_id>/brain")
+def lead_brain(lead_id):
+    """N261: market-brain decision bundle for one lead.
+
+    Returns closability + best_angle + recommended_first_action + money range
+    + the suggested mockup (slug + variant), all derived from existing fields.
+    Pure read; no mutation.
+    """
+    leads = load_json(LEADS_FILE).get("leads", [])
+    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    if not lead:
+        return jsonify({"error": "lead not found", "id": lead_id}), 404
+
+    # Ensure the lead has a fresh score so closability stays consistent
+    # with the dashboard's call queue view.
+    s = commands.score_lead(lead)
+    lead["_score"] = s["score"]
+    lead["_label"] = s["label"]
+    lead["_signals"] = s["signals"]
+
+    rec = marko_brain.recommended_first_action(lead)
+    slug = marko_brain.niche_to_mockup_slug(lead.get("niche"))
+    mockup = None
+    if slug and slug in MOCKUP_CATALOG:
+        variant = marko_brain.best_mockup_variant(lead.get("niche"))
+        if variant not in MOCKUP_CATALOG[slug]:
+            variant = next(iter(MOCKUP_CATALOG[slug].keys()))
+        mockup = {
+            "slug": slug,
+            "variant": variant,
+            "url": url_for("show_mockup", slug=slug, variant=variant,
+                           lead_id=lead.get("id")),
+        }
+
+    return jsonify({
+        "id": lead.get("id"),
+        "score": s["score"],
+        "label": s["label"],
+        "closability": marko_brain.closability_score(lead),
+        "path": rec["path"],
+        "action": rec["action"],
+        "by_when": rec["by_when"],
+        "reason": rec["reason"],
+        "best_angle": marko_brain.best_angle(lead),
+        "opportunity": marko_brain.opportunity_size(lead),
+        "mockup": mockup,
+    })
+
+
+@app.route("/mockup/<slug>/<variant>")
+def show_mockup(slug, variant):
+    """N261: render a niche mockup as a 'show prospect what theirs could look like'.
+
+    Only renders mockups in the whitelist built at import (MOCKUP_CATALOG)
+    so this route cannot be tricked into loading arbitrary templates.
+    Optional ?lead_id= populates the business name / city / state / phone;
+    otherwise placeholder values are used so the page still demos cleanly.
+    """
+    if slug not in MOCKUP_CATALOG or variant not in MOCKUP_CATALOG[slug]:
+        return jsonify({
+            "error": "mockup not found",
+            "slug": slug, "variant": variant,
+            "available": {k: sorted(v.keys()) for k, v in MOCKUP_CATALOG.items()},
+        }), 404
+
+    lead_id = request.args.get("lead_id") or ""
+    lead = None
+    if lead_id:
+        leads = load_json(LEADS_FILE).get("leads", [])
+        lead = next((l for l in leads if l.get("id") == lead_id), None)
+
+    if lead:
+        name = lead.get("name") or "Your Business"
+        city = lead.get("city") or ""
+        state = lead.get("state") or ""
+        phone = lead.get("phone") or "(555) 123-4567"
+    else:
+        name = "Your Business"
+        city = "Your City"
+        state = ""
+        phone = "(555) 123-4567"
+
+    return render_template(
+        f"mockup/{MOCKUP_CATALOG[slug][variant]}",
+        name=name, city=city, state=state, phone=phone,
+        slug=slug, variant=variant, lead_id=lead_id,
+    )
 
 
 @app.route("/campaign/preset/<preset_id>", methods=["POST"])

@@ -3,10 +3,12 @@
 Run:   python smoke_test.py
 Exit:  0 on all-pass, 1 on any failure.
 """
+import io
 import json
 import os
 import sys
 import tempfile
+import zipfile
 from datetime import datetime, timedelta
 from unittest import mock
 
@@ -636,6 +638,48 @@ def test_intel_and_compliance_are_read_only():
           "Reply stop" in email["body"] and "1 Main St" in email["body"])
 
 
+def test_save_config_is_explicit_and_logged():
+    print("test_save_config_is_explicit_and_logged")
+    with tempfile.TemporaryDirectory() as tmp:
+        config = {
+            "batch_size": 10,
+            "sender_name": "old",
+            "from_email": "old@example.com",
+            "unsubscribe_text": "old stop",
+            "physical_address": "old address",
+            "smtp": {"host": "smtp.example.com"},
+            "email_template": {"subject": "s", "body": "b"},
+        }
+        _seed(tmp, config=config)
+
+        updated = commands.save_config({
+            "sender_name": "new",
+            "from_email": "new@example.com",
+            "batch_size": 99,
+            "smtp": {"host": "evil.example.com"},
+            "deliverability": {"spf_ok": True, "unsafe": True},
+        })
+        saved = json.load(open(commands.CONFIG_FILE))
+        log = json.load(open(commands.LOG_FILE)).get("log", [])
+        entry = log[-1] if log else {}
+
+        check("save_config updates whitelisted compliance fields",
+              saved["sender_name"] == "new"
+              and saved["from_email"] == "new@example.com"
+              and updated["sender_name"] == "new")
+        check("save_config preserves non-whitelisted config",
+              saved["batch_size"] == 10
+              and saved["smtp"]["host"] == "smtp.example.com")
+        check("save_config filters deliverability keys",
+              saved["deliverability"] == {"spf_ok": True},
+              f"got {saved.get('deliverability')}")
+        check("save_config writes explicit audit log entry",
+              entry.get("action") == "config_update"
+              and entry.get("scope") == "compliance"
+              and "sender_name" in entry.get("fields", []),
+              f"got {entry}")
+
+
 def test_intel_and_email_routes():
     print("test_intel_and_email_routes")
     with tempfile.TemporaryDirectory() as tmp:
@@ -968,7 +1012,8 @@ def test_n182_mockup_renders_per_niche():
             "detailers": "auto detailer","salons": "salon",
         }
         leads = []
-        for idx, (slug, niche_str) in enumerate(niche_lead_seed.items(), start=1):
+        # Start at L004 so we don't collide with the 3 base leads added by _make_n182_seed.
+        for idx, (slug, niche_str) in enumerate(niche_lead_seed.items(), start=4):
             leads.append({"id": f"L{idx:03d}", "name": f"Test {slug.title()}",
                           "phone": f"804-555-{idx:04d}",
                           "city": "Richmond", "state": "VA",
@@ -1181,9 +1226,13 @@ def test_n182_buttons_on_home_call_first():
               "Create Mockup Pitch" in html, "button label missing")
         check("home shows Export Pitch Pack button label",
               "Export Pitch Pack" in html, "button label missing")
-        # Pipeline pill: 2 leads CONTACTED+INTERESTED with priced offers → $3,000
+        # Pipeline pill: 2 leads CONTACTED+INTERESTED with priced offers.
+        # L002 dog groomer + "no online booking" -> QUOTE_INTAKE $497.
+        # L003 roofer + "no contact form" (high-value) -> BOOKERMOVE $1,500.
+        # Total = $1,997 across 2 leads.
         check("home shows pipeline total pill",
-              "pipeline $3,000" in html, "pipeline pill missing or wrong")
+              "pipeline $1,997" in html and "(2 leads)" in html,
+              "pipeline pill missing or wrong")
 
 
 def main():
@@ -1208,6 +1257,7 @@ def main():
     test_marko_intel_script()
     test_marko_intel_email()
     test_intel_and_compliance_are_read_only()
+    test_save_config_is_explicit_and_logged()
     test_intel_and_email_routes()
     test_marko_intel_voicemail()
     test_marko_intel_why_they_buy()

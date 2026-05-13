@@ -24,6 +24,8 @@ LEAD_STATUSES = [
     "NEW", "CONTACTED", "RETRY", "FAILED", "REPLIED", "ARCHIVED", "CALLED",
     # N183/N194 dispositions
     "INTERESTED", "NOT_INTERESTED", "CALLBACK", "BOOKED", "DNC", "SKIPPED",
+    # N128 close-outcome dispositions (cashflow tracker)
+    "VOICEMAIL", "CLOSED_WON", "CLOSED_LOST",
 ]
 
 # Quality scoring (N031 → N182: 5-tier)
@@ -40,6 +42,7 @@ SCORE_LOW_THRESHOLD = 20      # below this == DEAD
 CALL_QUEUE_EXCLUDE = {
     "FAILED", "ARCHIVED", "CALLED", "BOOKED", "NOT_INTERESTED", "SKIPPED",
     "DNC", "DO_NOT_CONTACT", "UNSUBSCRIBED", "STOP", "OPTED_OUT",
+    "CLOSED_WON", "CLOSED_LOST",
 }
 
 # Follow-up overdue threshold (hours since last_attempt_at on CONTACTED leads)
@@ -1177,4 +1180,101 @@ def money_mode(sender_name="Jay"):
         "cap_remaining": cap_remaining,
         "daily_cap": DAILY_SEND_CAP,
         "deliverability": mc.deliverability_checklist(config),
+    }
+
+
+# ---------- N128: Cashflow tracker ----------
+#
+# Real outcomes only — counts come from lead status transitions, not
+# projections. `mrr_value` and `closed_at` are written by set_lead_closed
+# when Jay marks a deal won/lost in the dashboard.
+
+def set_lead_closed(lead_id, won, mrr_value=0, note=None):
+    """Mark a lead as CLOSED_WON or CLOSED_LOST.
+
+    Writes `closed_at`, `closed_won` (bool), and `mrr_value` (number, 0 if
+    lost or unknown). Returns True on success, False if the lead is missing.
+    Records an audit entry in marko_log.
+    """
+    try:
+        mrr = max(0, int(round(float(mrr_value or 0))))
+    except (TypeError, ValueError):
+        mrr = 0
+    won = bool(won)
+    new_status = "CLOSED_WON" if won else "CLOSED_LOST"
+
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") == lead_id:
+            l["status"] = new_status
+            l["closed_won"] = won
+            l["mrr_value"] = mrr if won else 0
+            l["closed_at"] = datetime.now().isoformat()
+            if note:
+                l["closed_note"] = str(note)[:200]
+            save_json(LEADS_FILE, data)
+            log_action({
+                "action": "lead_close",
+                "lead_id": lead_id,
+                "status": new_status,
+                "mrr_value": l["mrr_value"],
+            })
+            return True
+    return False
+
+
+def cashflow_summary():
+    """Return real-outcome counts for the Money Mode cashflow card.
+
+    Pure read; uses status + mrr_value + closed_at fields. Never invents
+    numbers. `mrr_total_won` only sums leads marked CLOSED_WON. The "this
+    month" bucket uses closed_at month boundary.
+    """
+    leads = load_json(LEADS_FILE).get("leads", [])
+    now = datetime.now()
+    this_month_prefix = now.strftime("%Y-%m")
+
+    demos_booked = 0
+    closed_won = 0
+    closed_lost = 0
+    mrr_total_won = 0
+    mrr_this_month = 0
+    won_this_month = 0
+    recent_wins = []
+
+    for l in leads:
+        s = (l.get("status") or "").upper()
+        if s == "BOOKED":
+            demos_booked += 1
+        elif s == "CLOSED_WON":
+            closed_won += 1
+            mrr = int(l.get("mrr_value") or 0)
+            mrr_total_won += mrr
+            closed_at = l.get("closed_at") or ""
+            if closed_at.startswith(this_month_prefix):
+                won_this_month += 1
+                mrr_this_month += mrr
+            recent_wins.append({
+                "id": l.get("id"),
+                "name": l.get("name"),
+                "mrr": mrr,
+                "closed_at": closed_at,
+            })
+        elif s == "CLOSED_LOST":
+            closed_lost += 1
+
+    recent_wins.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
+
+    total_attempts = closed_won + closed_lost
+    close_rate = round(100.0 * closed_won / total_attempts, 1) if total_attempts else None
+
+    return {
+        "demos_booked": demos_booked,
+        "closed_won": closed_won,
+        "closed_lost": closed_lost,
+        "close_rate_pct": close_rate,
+        "mrr_total_won": mrr_total_won,
+        "mrr_this_month": mrr_this_month,
+        "won_this_month": won_this_month,
+        "recent_wins": recent_wins[:5],
     }

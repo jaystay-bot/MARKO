@@ -526,13 +526,14 @@ def compute_leaks(lead):
                      f"(call the number twice to confirm)",
         })
 
-    # Needs-check: speed-to-lead is only verifiable by submitting a form.
-    if "no contact form" not in pain:
-        needs_check.append({
-            "tag": "speed-to-lead",
-            "label": "Speed-to-lead on form submissions",
-            "basis": "cannot verify without submitting a test form",
-        })
+    # Needs-check: speed-to-lead is ALWAYS unverifiable from the outside.
+    # Even when a contact form exists, the only way to confirm reply speed
+    # is to actually submit a test entry — which we don't do automatically.
+    needs_check.append({
+        "tag": "speed-to-lead",
+        "label": "Speed-to-lead on form submissions",
+        "basis": "cannot verify without submitting a test form",
+    })
 
     return {
         "confirmed": confirmed,
