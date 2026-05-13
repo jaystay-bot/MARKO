@@ -55,8 +55,83 @@ def get(path):
         return r.status, r.read().decode("utf-8", "replace")
 
 
+# N276.2: raw-byte snapshot/restore wrapper. The signed-webhook gates write
+# email_event entries to marko_log.json (via the dashboard handler). Without
+# this, even a clean PASS leaves marko_log polluted.
+
+_TRACKED_FILES = ("LEADS_FILE", "CAMPAIGNS_FILE", "LOG_FILE", "CONFIG_FILE")
+
+
+def _snapshot_files():
+    snap = {}
+    for attr in _TRACKED_FILES:
+        path = getattr(commands, attr)
+        try:
+            with open(path, "rb") as f:
+                snap[path] = f.read()
+        except FileNotFoundError:
+            snap[path] = None
+    return snap
+
+
+def _patient_replace(tmp, path, attempts=20, delay=0.1):
+    last = None
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:
+            last = exc
+            time.sleep(delay * (i + 1))
+    try:
+        os.remove(tmp)
+    except FileNotFoundError:
+        pass
+    raise last
+
+
+def _restore_files(snap):
+    for path, blob in snap.items():
+        if blob is None:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            continue
+        tmp = path + ".restore.tmp"
+        with open(tmp, "wb") as f:
+            f.write(blob)
+        _patient_replace(tmp, path)
+
+
 def main():
-    proof = {}
+    snap = _snapshot_files()
+    try:
+        return _main_inner()
+    finally:
+        _restore_files(snap)
+
+
+def _main_inner():
+    # N276.2: pre-initialize every gate key the final verdict touches so a
+    # short-circuit path (e.g. SECRET unset → signed_webhook skip → no
+    # panel_reflects_events write) can't crash the verdict with a KeyError.
+    # Each gate that runs overwrites its key; gates that don't run keep the
+    # clear-fail default with a reason string.
+    proof = {
+        "dry_run":             {"pass": False, "reason": "not run"},
+        "live_no_key":         {"pass": False, "reason": "not run"},
+        "webhook_unsigned":    {"pass": False, "reason": "not run"},
+        "webhook_bad_sig":     {"pass": False, "reason": "not run"},
+        "signed_webhook":      {"pass": False, "reason": "not run"},
+        "panel_reflects_events": {"pass": False, "reason": "not run "
+                                  "(skipped when EMAIL_WEBHOOK_SECRET is unset)"},
+        "compliance_blockers": {"pass": False, "reason": "not run"},
+        "daily_cap":           {"pass": False, "reason": "not run"},
+        "no_voice_or_sms":     {"pass": False, "reason": "not run"},
+        "n273_verify.py":      {"pass": False, "reason": "not run"},
+        "n274_verify.py":      {"pass": False, "reason": "not run"},
+    }
 
     # ---- gate 1: dry-run never opens a socket ----
     import urllib.request as _ur

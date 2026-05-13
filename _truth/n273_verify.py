@@ -60,21 +60,50 @@ def csv_top_7_from_route():
 
 
 def _snapshot_data_files():
-    """Hermetic guard: snapshot every disk file the verifier might touch
-    so the verdict can never depend on, or leave behind, real session state.
+    """N276.2: raw-byte snapshot. The old deepcopy+save_json round-trip
+    (a) reformatted the file (CRLF/key-order drift) and (b) raced
+    os.replace against the dashboard's handlers. Raw bytes + patient
+    replace eliminates both.
     """
-    import copy as _copy
-    return {
-        "leads":     _copy.deepcopy(commands.load_json(commands.LEADS_FILE)),
-        "campaigns": _copy.deepcopy(commands.load_json(commands.CAMPAIGNS_FILE)),
-        "log":       _copy.deepcopy(commands.load_json(commands.LOG_FILE)),
-    }
+    snap = {}
+    for path in (commands.LEADS_FILE, commands.CAMPAIGNS_FILE,
+                 commands.LOG_FILE):
+        try:
+            with open(path, "rb") as f:
+                snap[path] = f.read()
+        except FileNotFoundError:
+            snap[path] = None
+    return snap
+
+
+def _patient_replace(tmp, path, attempts=20, delay=0.1):
+    last = None
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:
+            last = exc
+            time.sleep(delay * (i + 1))
+    try:
+        os.remove(tmp)
+    except FileNotFoundError:
+        pass
+    raise last
 
 
 def _restore_data_files(snap):
-    commands.save_json(commands.LEADS_FILE,     snap["leads"])
-    commands.save_json(commands.CAMPAIGNS_FILE, snap["campaigns"])
-    commands.save_json(commands.LOG_FILE,       snap["log"])
+    for path, blob in snap.items():
+        if blob is None:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            continue
+        tmp = path + ".restore.tmp"
+        with open(tmp, "wb") as f:
+            f.write(blob)
+        _patient_replace(tmp, path)
 
 
 def main():

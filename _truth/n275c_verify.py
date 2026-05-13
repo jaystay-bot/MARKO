@@ -63,6 +63,29 @@ def _snapshot():
     return snap
 
 
+def _patient_replace(tmp, path, attempts=20, delay=0.1):
+    """N276.2: os.replace on Windows raises PermissionError when the dest is
+    held by another reader (Flask handler mid-request, child verifier
+    subprocess, antivirus scanner). Retry with linear backoff; clean up the
+    tmp file if every attempt fails so we don't leave a `.restore.tmp`
+    polluting the working tree.
+    """
+    last = None
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:
+            last = exc
+            time.sleep(delay * (i + 1))
+    # Give up and clean up.
+    try:
+        os.remove(tmp)
+    except FileNotFoundError:
+        pass
+    raise last  # surface the original error
+
+
 def _restore(snap):
     """Restore exact pre-run bytes (or remove the file if it didn't exist)."""
     for path, blob in snap.values():
@@ -71,11 +94,11 @@ def _restore(snap):
                 os.remove(path)
             except FileNotFoundError:
                 pass
-        else:
-            tmp = path + ".restore.tmp"
-            with open(tmp, "wb") as f:
-                f.write(blob)
-            os.replace(tmp, path)
+            continue
+        tmp = path + ".restore.tmp"
+        with open(tmp, "wb") as f:
+            f.write(blob)
+        _patient_replace(tmp, path)
 
 
 def _post_form(path, fields):

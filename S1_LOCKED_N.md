@@ -1,34 +1,51 @@
-# S1_LOCKED_N.md — Architect scope lock
+# S1_LOCKED_N.md - Runtime cleanup scope lock
 
-## Allowed files (additive only)
-- `commands.py`
-- `scraper.py` (extend `extract_contact_from_url` return signature)
-- `dashboard.py` (new routes + context vars)
-- `templates/index.html` (surgical edits; preserve all existing sections)
-- `templates.json` (expand campaign_presets with niche+tier)
-- `smoke_test.py` (additive tests)
-- `playwright_smoke.py` (additive assertions)
-- `LESSONS.md`, `SESSION_LOG.md`, `CONTEXT_PACKET.md` (this 8-Hat set)
+## Active N
+
+N-MARKO-RUNTIME-STATE-CLEANUP-AND-SMOKE-GREEN
+
+## Allowed files
+
+- `.gitignore`
+- `CURRENT_N.md`
+- `S1_LOCKED_N.md`
+- `smoke_test.py`
+- Existing `_truth/*.py` verifier hardening already present from previous safe-sync work
+- `A1_OUTPUT_N.md`
+- `TRUTH_RESULT_N.md`
+- `NEXT_N.md`
+
+## Runtime State Rule
+
+- `leads.json` and `marko_log.json` must not remain dirty.
+- Before restoring runtime JSON, preserve dirty copies under ignored `_truth/runtime_backups/`.
+- Do not delete local runtime data without backup.
 
 ## Forbidden
-- `main.py`, `cli.py`, `vercel.json`, `requirements.txt` — do not touch
-- Removing existing routes, sections, columns, or features
-- Background workers / long-running threads (Flask sync model)
-- New runtime dependencies
 
-## Verify command (every check must PASS)
-```
+- No product UI edits.
+- No route changes.
+- No scraper expansion.
+- No database migration.
+- No dependency changes.
+- No BookerMove export generation.
+- No push.
+- No deploy.
+
+## Verify command
+
+```text
+git status --short --untracked-files=all
+python smoke_test.py
 python -m py_compile main.py dashboard.py commands.py scraper.py cli.py
-python smoke_test.py            # must be > 42/42 (additive)
-python cli.py --help
-python -c "from main import app; print(app)"
-python -c "from dashboard import app; print(len(app.url_map._rules))"
-vercel build --yes
-python playwright_smoke.py      # must be > 21/21 (additive)
-git push origin main            # triggers Vercel auto-deploy
-# live URL feature check post-deploy
+python playwright_smoke.py
 ```
 
-## Promote rule
-- All verifies green → commit → push → poll deploy READY → live-page feature grep
-- Any verify fail → STOP, fix, re-run, do not commit
+## PASS rule
+
+PASS only if:
+
+- `python smoke_test.py` exits 0.
+- `python playwright_smoke.py` exits 0.
+- `leads.json` and `marko_log.json` match `HEAD`.
+- Dirty tree contains only intentional code/control/doc changes.

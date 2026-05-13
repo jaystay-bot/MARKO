@@ -4,3 +4,10 @@ _smoke.log
 *.pyc
 .claude/
 .env*.local
+.refresh_owners.*
+_truth/*.csv
+_truth/*.png
+_truth/*.zip
+_truth/*_result.json
+debug.log
+_truth/runtime_backups/

@@ -63,18 +63,50 @@ def sign_marko(body, secret):
 
 
 def _snapshot_data_files():
-    import copy as _copy
-    return {
-        "leads":     _copy.deepcopy(commands.load_json(commands.LEADS_FILE)),
-        "campaigns": _copy.deepcopy(commands.load_json(commands.CAMPAIGNS_FILE)),
-        "log":       _copy.deepcopy(commands.load_json(commands.LOG_FILE)),
-    }
+    # N276.2: raw-byte snapshot, NOT json-deepcopy + save_json. The old approach
+    # round-tripped through save_json on restore, which (a) reformatted the file
+    # (CRLF/key-order drift) and (b) raced os.replace against any other Flask
+    # handler holding the file briefly. Raw bytes + patient_replace eliminates
+    # both classes of issue.
+    snap = {}
+    for path in (commands.LEADS_FILE, commands.CAMPAIGNS_FILE, commands.LOG_FILE):
+        try:
+            with open(path, "rb") as f:
+                snap[path] = f.read()
+        except FileNotFoundError:
+            snap[path] = None
+    return snap
+
+
+def _patient_replace(tmp, path, attempts=20, delay=0.1):
+    """N276.2: Windows file-in-use safe os.replace with retry+backoff."""
+    last = None
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:
+            last = exc
+            time.sleep(delay * (i + 1))
+    try:
+        os.remove(tmp)
+    except FileNotFoundError:
+        pass
+    raise last
 
 
 def _restore_data_files(snap):
-    commands.save_json(commands.LEADS_FILE,     snap["leads"])
-    commands.save_json(commands.CAMPAIGNS_FILE, snap["campaigns"])
-    commands.save_json(commands.LOG_FILE,       snap["log"])
+    for path, blob in snap.items():
+        if blob is None:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            continue
+        tmp = path + ".restore.tmp"
+        with open(tmp, "wb") as f:
+            f.write(blob)
+        _patient_replace(tmp, path)
 
 
 def main():
@@ -194,14 +226,17 @@ def _main_inner():
     # Snapshot all three data files — the spied "live" marko_send would
     # otherwise leave fake CONTACTED statuses, fake sends-counter bumps, and
     # 7+ phony log entries on disk every run. Restore in finally.
-    import copy as _copy
-    leads_before    = _copy.deepcopy(commands.load_json(commands.LEADS_FILE))
-    campaigns_before = _copy.deepcopy(commands.load_json(commands.CAMPAIGNS_FILE))
-    log_before       = _copy.deepcopy(commands.load_json(commands.LOG_FILE))
+    # N276.2: raw-byte snapshot + patient replace (Windows file-in-use safe).
+    inner_snap = {}
+    for path in (commands.LEADS_FILE, commands.CAMPAIGNS_FILE, commands.LOG_FILE):
+        with open(path, "rb") as f:
+            inner_snap[path] = f.read()
     def _restore_files():
-        commands.save_json(commands.LEADS_FILE, leads_before)
-        commands.save_json(commands.CAMPAIGNS_FILE, campaigns_before)
-        commands.save_json(commands.LOG_FILE, log_before)
+        for p, blob in inner_snap.items():
+            tmp = p + ".restore.tmp"
+            with open(tmp, "wb") as f:
+                f.write(blob)
+            _patient_replace(tmp, p)
     try:
         result = commands.marko_send(dry_run=False)
         # Assert at least one captured body contains the footer

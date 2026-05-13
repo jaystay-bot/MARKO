@@ -33,7 +33,88 @@ def _fetch(path):
         return r.status, r.read()
 
 
+# N276.2: raw-byte snapshot/restore wrapper. n274 exercises refresh_owners
+# which intentionally writes to leads.json (adding `owner` fields). Without
+# this, a successful PASS still pollutes the working tree.
+
+_TRACKED_FILES = ("LEADS_FILE", "CAMPAIGNS_FILE", "LOG_FILE", "CONFIG_FILE")
+_REFRESH_FILES = (
+    os.path.join(ROOT, ".refresh_owners.lock"),
+    os.path.join(ROOT, ".refresh_owners.result.json"),
+)
+
+
+def _snapshot():
+    snap = {}
+    for attr in _TRACKED_FILES:
+        path = getattr(commands, attr)
+        try:
+            with open(path, "rb") as f:
+                snap[path] = f.read()
+        except FileNotFoundError:
+            snap[path] = None
+    for path in _REFRESH_FILES:
+        try:
+            with open(path, "rb") as f:
+                snap[path] = f.read()
+        except FileNotFoundError:
+            snap[path] = None
+    return snap
+
+
+def _patient_replace(tmp, path, attempts=20, delay=0.1):
+    last = None
+    for i in range(attempts):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:
+            last = exc
+            time.sleep(delay * (i + 1))
+    try:
+        os.remove(tmp)
+    except FileNotFoundError:
+        pass
+    raise last
+
+
+def _restore(snap):
+    for path, blob in snap.items():
+        if blob is None:
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            continue
+        tmp = path + ".restore.tmp"
+        with open(tmp, "wb") as f:
+            f.write(blob)
+        _patient_replace(tmp, path)
+
+
 def main():
+    snap = _snapshot()
+    try:
+        return _main_inner()
+    finally:
+        # Wait for the background refresh-owners thread to drop the lock
+        # before restoring — otherwise the thread keeps writing files after
+        # our restore returns. Poll up to ~30s (real refresh is typically
+        # <10s with 3 URLs × 5s timeout each).
+        try:
+            for _ in range(60):
+                if not commands.refresh_owners_status().get("running"):
+                    break
+                time.sleep(0.5)
+            # Even after the lock drops, give the writer 0.5s to finish
+            # flushing the result file (so we know what to restore).
+            time.sleep(0.5)
+        except Exception:
+            time.sleep(2)
+        _restore(snap)
+
+
+def _main_inner():
     proof = {}
 
     # ---- gate a: pitch_pack_today.zip ----

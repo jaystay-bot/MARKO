@@ -17,6 +17,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import commands
 import scraper
 
+MOCK_RESEND_ENV = {
+    "RESEND_API_KEY": "test-resend-key-1234567890",
+    "MARKO_SMTP_EMAIL": "a@b.com",
+}
+KV_TEST_TOKEN = "fake-token-1234567890"
+
 
 # ---------- fixture helpers ----------
 
@@ -125,15 +131,16 @@ def test_batch_cap():
     print("test_batch_cap")
     with tempfile.TemporaryDirectory() as tmp:
         leads = {"leads": [{"id": f"L{i:03d}", "name": f"L{i}",
-                            "email": f"l{i}@x.com", "status": "NEW", "niche": "p"}
+                            "email": f"l{i}@x{i}.com", "status": "NEW", "niche": "p"}
                            for i in range(15)]}
         config = {"batch_size": 25, "sender_name": "tester", "smtp": {},
                   "email_template": {"subject": "s", "body": "b"}}
         _seed(tmp, leads=leads, config=config)
-        with mock.patch.dict(os.environ, {"MARKO_SMTP_EMAIL": "a@b.com",
-                                          "MARKO_SMTP_PASSWORD": "pw"}):
+        with mock.patch.dict(os.environ, MOCK_RESEND_ENV), \
+             mock.patch.object(commands, "_lead_in_business_hours",
+                               return_value=True):
             with mock.patch.object(commands, "send_email",
-                                   return_value=(True, None, None)):
+                                   return_value=(True, None, None, None)):
                 commands.marko_send(dry_run=False)
         after = json.load(open(commands.LEADS_FILE))["leads"]
         contacted = [l for l in after if l["status"] == "CONTACTED"]
@@ -150,8 +157,9 @@ def test_daily_cap():
         leads = {"leads": [{"id": "L100", "name": "Z", "email": "z@x.com",
                             "status": "NEW", "niche": "p"}]}
         _seed(tmp, leads=leads, log=log)
-        with mock.patch.dict(os.environ, {"MARKO_SMTP_EMAIL": "a@b.com",
-                                          "MARKO_SMTP_PASSWORD": "pw"}):
+        with mock.patch.dict(os.environ, MOCK_RESEND_ENV), \
+             mock.patch.object(commands, "_lead_in_business_hours",
+                               return_value=True):
             result = commands.marko_send(dry_run=False)
         check("daily cap returns BLOCKED message",
               "BLOCKED" in (result or ""), f"got {result!r}")
@@ -168,10 +176,11 @@ def test_daily_cap():
                             "email": f"l{i}@x.com", "status": "NEW", "niche": "p"}
                            for i in range(10)]}
         _seed(tmp, leads=leads, log=log)
-        with mock.patch.dict(os.environ, {"MARKO_SMTP_EMAIL": "a@b.com",
-                                          "MARKO_SMTP_PASSWORD": "pw"}):
+        with mock.patch.dict(os.environ, MOCK_RESEND_ENV), \
+             mock.patch.object(commands, "_lead_in_business_hours",
+                               return_value=True):
             with mock.patch.object(commands, "send_email",
-                                   return_value=(True, None, None)):
+                                   return_value=(True, None, None, None)):
                 commands.marko_send(dry_run=False)
         after = json.load(open(commands.LEADS_FILE))["leads"]
         contacted = [l for l in after if l["status"] == "CONTACTED"]
@@ -186,10 +195,11 @@ def test_smtp_transient():
             leads = {"leads": [{"id": "L001", "name": "X", "email": "x@x.com",
                                 "status": "NEW", "niche": "p"}]}
             _seed(tmp, leads=leads)
-            with mock.patch.dict(os.environ, {"MARKO_SMTP_EMAIL": "a@b.com",
-                                              "MARKO_SMTP_PASSWORD": "pw"}):
+            with mock.patch.dict(os.environ, MOCK_RESEND_ENV), \
+                 mock.patch.object(commands, "_lead_in_business_hours",
+                                   return_value=True):
                 with mock.patch.object(commands, "send_email",
-                                       return_value=(False, f"{code} try later", code)):
+                                       return_value=(False, f"{code} try later", code, None)):
                     commands.marko_send(dry_run=False)
             after = json.load(open(commands.LEADS_FILE))["leads"]
             check(f"transient SMTP {code} marks RETRY",
@@ -203,10 +213,11 @@ def test_smtp_permanent():
             leads = {"leads": [{"id": "L001", "name": "X", "email": "x@x.com",
                                 "status": "NEW", "niche": "p"}]}
             _seed(tmp, leads=leads)
-            with mock.patch.dict(os.environ, {"MARKO_SMTP_EMAIL": "a@b.com",
-                                              "MARKO_SMTP_PASSWORD": "pw"}):
+            with mock.patch.dict(os.environ, MOCK_RESEND_ENV), \
+                 mock.patch.object(commands, "_lead_in_business_hours",
+                                   return_value=True):
                 with mock.patch.object(commands, "send_email",
-                                       return_value=(False, "rejected", code)):
+                                       return_value=(False, "rejected", code, None)):
                     commands.marko_send(dry_run=False)
             after = json.load(open(commands.LEADS_FILE))["leads"]
             check(f"permanent SMTP {code} marks FAILED",
@@ -220,10 +231,11 @@ def test_retry_count_escalation():
         leads = {"leads": [{"id": "L001", "name": "X", "email": "x@x.com",
                             "status": "NEW", "niche": "p", "retry_count": 2}]}
         _seed(tmp, leads=leads)
-        with mock.patch.dict(os.environ, {"MARKO_SMTP_EMAIL": "a@b.com",
-                                          "MARKO_SMTP_PASSWORD": "pw"}):
+        with mock.patch.dict(os.environ, MOCK_RESEND_ENV), \
+             mock.patch.object(commands, "_lead_in_business_hours",
+                               return_value=True):
             with mock.patch.object(commands, "send_email",
-                                   return_value=(False, "421 try later", 421)):
+                                   return_value=(False, "421 try later", 421, None)):
                 commands.marko_send(dry_run=False)
         after = json.load(open(commands.LEADS_FILE))["leads"]
         check("retry_count escalation: rc=2 + transient -> FAILED (rc=3)",
@@ -917,7 +929,7 @@ def test_storage_kv_roundtrip_mocked():
         method = req.get_method()
         captured["calls"].append((method, url, data))
         # Check auth header
-        if req.get_header("Authorization") != "Bearer fake-token":
+        if req.get_header("Authorization") != f"Bearer {KV_TEST_TOKEN}":
             return FakeResp(b'{"error":"unauthorized"}')
         if method == "POST" and "/set/" in url:
             key = url.rsplit("/set/", 1)[1]
@@ -934,7 +946,7 @@ def test_storage_kv_roundtrip_mocked():
     env = {
         "STORAGE_BACKEND": "kv",
         "KV_REST_API_URL": "https://fake.upstash.io",
-        "KV_REST_API_TOKEN": "fake-token",
+        "KV_REST_API_TOKEN": KV_TEST_TOKEN,
     }
     with mock.patch.dict(os.environ, env, clear=False):
         with mock.patch.object(storage.urllib.request, "urlopen",
@@ -972,7 +984,7 @@ def test_storage_kv_missing_key_raises_filenotfound():
     env = {
         "STORAGE_BACKEND": "kv",
         "KV_REST_API_URL": "https://fake.upstash.io",
-        "KV_REST_API_TOKEN": "fake-token",
+        "KV_REST_API_TOKEN": KV_TEST_TOKEN,
     }
     with mock.patch.dict(os.environ, env, clear=False):
         with mock.patch.object(storage.urllib.request, "urlopen",
@@ -996,7 +1008,7 @@ def test_storage_is_persistent_matrix():
     # kv with creds -> persistent
     with mock.patch.dict(os.environ, {
         "STORAGE_BACKEND": "kv",
-        "KV_REST_API_URL": "https://x", "KV_REST_API_TOKEN": "y",
+        "KV_REST_API_URL": "https://x", "KV_REST_API_TOKEN": KV_TEST_TOKEN,
     }, clear=True):
         check("kv with creds -> persistent", storage.is_persistent())
     # kv without creds -> NOT persistent
