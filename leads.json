@@ -11,8 +11,9 @@
       "email": null,
       "contact_type": "phone",
       "niche": "dog groomer",
-      "status": "NEW",
-      "source": "scrape"
+      "status": "INTERESTED",
+      "source": "scrape",
+      "last_attempt_at": "2026-05-12T21:58:23.085005"
     },
     {
       "id": "L002",

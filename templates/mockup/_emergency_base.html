@@ -1,0 +1,10 @@
+<div class="mk mk-emergency">
+  <div class="mk-badge">{{ badge|default('EMERGENCY?') }}</div>
+  <h2 class="mk-name">{{ name }}</h2>
+  <div class="mk-sub">{{ city }}{% if state %}, {{ state }}{% endif %} · {{ tagline }}</div>
+  <a class="mk-cta mk-cta-call" href="tel:{{ phone }}">{{ call_label|default('CALL NOW') }} · {{ phone }}</a>
+  <div class="mk-feat">→ {{ feat1 }}</div>
+  <a class="mk-cta mk-cta-sub" href="#quote">{{ sub_label|default('Get a Free Quote') }}</a>
+  <div class="mk-feat">→ {{ feat2 }}</div>
+  <div class="mk-foot">Mockup of what we'd build for {{ name }}. Uses only public business data.</div>
+</div>

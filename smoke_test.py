@@ -302,25 +302,26 @@ def test_template_merge_fields():
 
 def test_score_lead_signals():
     print("test_score_lead_signals")
-    # Maxed-out lead -> HOT
+    # Maxed-out lead -> MONEY (5-tier: >=90 is MONEY, >=70 is HOT)
     full = {"name": "X", "email": "x@y.com", "phone": "555-1234",
             "website": "https://x.com/", "owner": "Pat", "niche": "movers",
             "city": "Richmond", "state": "VA", "campaign_id": "C001",
             "contact_type": "both", "source": "scrape"}
     s = commands.score_lead(full)
-    check("full-signal lead scores HOT >= 70",
-          s["score"] >= 70 and s["label"] == "HOT",
+    check("full-signal lead scores MONEY (>=90)",
+          s["score"] >= 90 and s["label"] == "MONEY",
           f"score={s['score']} label={s['label']}")
     check("full-signal lead lists key signals",
           set(["email","phone","both_contacts","website","owner","contact_page",
                "local","niche"]).issubset(set(s["signals"])),
           f"got {s['signals']}")
 
-    # Email-only -> WEAK
+    # Email-only -> LOW (score=20, threshold LOW>=20)
     weak = {"name": "X", "email": "x@y.com"}
     s2 = commands.score_lead(weak)
-    check("email-only lead is WEAK (score < 40)",
-          s2["score"] < 40 and s2["label"] == "WEAK", f"score={s2['score']}")
+    check("email-only lead is LOW (20 <= score < 40)",
+          20 <= s2["score"] < 40 and s2["label"] == "LOW",
+          f"score={s2['score']} label={s2['label']}")
 
     # Email + phone + website -> GOOD (mid range)
     mid = {"name": "Mid", "email": "m@m.com", "phone": "555-9999",
@@ -329,6 +330,13 @@ def test_score_lead_signals():
     check("email+phone+website is GOOD range",
           40 <= s3["score"] < 70 and s3["label"] == "GOOD",
           f"score={s3['score']} label={s3['label']}")
+
+    # No signals at all -> DEAD (score < 20)
+    dead = {"name": "Nothing"}
+    s4 = commands.score_lead(dead)
+    check("empty lead is DEAD (score < 20)",
+          s4["score"] < 20 and s4["label"] == "DEAD",
+          f"score={s4['score']} label={s4['label']}")
 
 
 def test_call_queue():
@@ -460,6 +468,67 @@ def test_campaign_preset_route():
               "TestPreset" in names, f"got {names}")
 
 
+def test_export_csv_is_read_only():
+    print("test_export_csv_is_read_only")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [{"id": "L001", "name": "Acme", "email": "a@a.com",
+                            "status": "NEW", "campaign_id": "C001"}]}
+        _seed(tmp, leads=leads)
+        files = [commands.CAMPAIGNS_FILE, commands.LEADS_FILE, commands.LOG_FILE]
+        before = {p: open(p, "rb").read() for p in files}
+
+        lead_csv = commands.export_leads_csv()
+        campaign_csv = commands.export_campaigns_csv()
+
+        after = {p: open(p, "rb").read() for p in files}
+        check("export_leads_csv returns CSV content",
+              "id,name" in lead_csv and "L001" in lead_csv)
+        check("export_campaigns_csv returns CSV content",
+              "id,name,project" in campaign_csv and "C001" in campaign_csv)
+        check("CSV exports do not mutate campaigns/leads/log JSON",
+              before == after, "export changed JSON files")
+
+
+def test_report_and_money_mode_are_read_only():
+    print("test_report_and_money_mode_are_read_only")
+    with tempfile.TemporaryDirectory() as tmp:
+        old = (datetime.now() - timedelta(hours=72)).isoformat()
+        leads = {"leads": [
+            {"id": "L001", "name": "Acme", "email": "a@a.com",
+             "phone": "555-1", "status": "NEW", "niche": "movers",
+             "pain_points": ["no online booking"]},
+            {"id": "L002", "name": "Beta", "email": "b@b.com",
+             "phone": "555-2", "status": "CONTACTED", "niche": "movers",
+             "last_attempt_at": old},
+        ]}
+        config = {
+            "batch_size": 10,
+            "sender_name": "tester",
+            "from_email": "tester@example.com",
+            "unsubscribe_text": "Reply stop to opt out.",
+            "physical_address": "1 Main St",
+            "stop_contact_list": [],
+            "smtp": {},
+            "email_template": {"subject": "s", "body": "b"},
+        }
+        _seed(tmp, leads=leads, config=config)
+        files = [commands.CAMPAIGNS_FILE, commands.LEADS_FILE,
+                 commands.LOG_FILE, commands.CONFIG_FILE]
+        before = {p: open(p, "rb").read() for p in files}
+
+        commands.marko_report()
+        summary = commands.pipeline_summary()
+        money = commands.money_mode()
+
+        after = {p: open(p, "rb").read() for p in files}
+        check("pipeline_summary returns counts",
+              "money_count" in summary and "followups_overdue" in summary)
+        check("money_mode returns operator sections",
+              "call_now" in money and "blockers" in money)
+        check("reports and money_mode do not mutate JSON",
+              before == after, "report/money mode changed JSON files")
+
+
 def test_marko_intel_money_estimate():
     print("test_marko_intel_money_estimate")
     import marko_intel
@@ -531,6 +600,42 @@ def test_marko_intel_email():
           f"body={e_none['body'][:80]!r}")
 
 
+def test_intel_and_compliance_are_read_only():
+    print("test_intel_and_compliance_are_read_only")
+    import marko_compliance
+    import marko_intel
+
+    lead = {"id": "L001", "name": "Acme Movers", "owner": "Sarah Johnson",
+            "email": "a@a.com", "phone": "555-123-4567",
+            "city": "Richmond", "niche": "movers",
+            "pain_points": ["no online booking", "weak mobile"],
+            "status": "NEW"}
+    config = {"sender_name": "Jay", "from_email": "jay@example.com",
+              "unsubscribe_text": "Reply stop to opt out.",
+              "physical_address": "1 Main St"}
+    lead_before = json.loads(json.dumps(lead, sort_keys=True))
+    config_before = json.loads(json.dumps(config, sort_keys=True))
+
+    marko_intel.estimate_missed_money(lead)
+    marko_intel.generate_script(lead)
+    marko_intel.generate_voicemail(lead)
+    marko_intel.why_they_buy(lead)
+    email = marko_intel.generate_email(lead, config=config)
+    marko_compliance.config_blockers(config)
+    marko_compliance.lead_blockers(lead, stop_list=["other@example.com"])
+    marko_compliance.compliance_check(config, lead, email["subject"],
+                                      email["body"], stop_list=[],
+                                      sends_today=0, daily_cap=50)
+    marko_compliance.deliverability_checklist(config)
+
+    check("intel helpers do not mutate lead input",
+          lead == lead_before, f"lead changed to {lead}")
+    check("compliance helpers do not mutate config input",
+          config == config_before, f"config changed to {config}")
+    check("generated compliance footer is explicit in preview",
+          "Reply stop" in email["body"] and "1 Main St" in email["body"])
+
+
 def test_intel_and_email_routes():
     print("test_intel_and_email_routes")
     with tempfile.TemporaryDirectory() as tmp:
@@ -551,7 +656,8 @@ def test_intel_and_email_routes():
               f"got {r.status_code}")
         j = r.get_json()
         check("/intel returns score + label", j.get("score") is not None
-              and j.get("label") in ("HOT", "GOOD", "WEAK"), f"got {j}")
+              and j.get("label") in ("MONEY", "HOT", "GOOD", "LOW", "DEAD"),
+              f"got {j}")
         check("/intel returns missed_money block",
               isinstance(j.get("missed_money"), dict)
               and "confidence" in j["missed_money"])
@@ -571,6 +677,157 @@ def test_intel_and_email_routes():
                   je.get("subject") and je.get("body"))
 
 
+def test_marko_intel_voicemail():
+    print("test_marko_intel_voicemail")
+    import marko_intel
+    lead = {"name": "Acme Movers", "owner": "Sarah Johnson",
+            "pain_points": ["no online booking", "weak mobile"]}
+    s = marko_intel.generate_voicemail(lead, sender_name="Jay")
+    check("voicemail addresses owner by first name",
+          "Sarah" in s and "Johnson" not in s, f"got {s!r}")
+    check("voicemail mentions business name", "Acme Movers" in s)
+    check("voicemail hooks first pain", "book" in s.lower() or "online" in s.lower(),
+          f"got {s!r}")
+    # No owner -> generic opener, no 'None'
+    s2 = marko_intel.generate_voicemail({"name": "X"}, sender_name="Jay")
+    check("voicemail no owner -> 'Hey, this is Jay'",
+          "Hey, this is Jay" in s2 and "None" not in s2, f"got {s2!r}")
+
+
+def test_marko_intel_why_they_buy():
+    print("test_marko_intel_why_they_buy")
+    import marko_intel
+    # Movers with weakness -> BookerMove angle
+    mover = {"niche": "movers", "pain_points":
+             ["no online booking", "weak mobile", "no contact form"]}
+    w = marko_intel.why_they_buy(mover)
+    check("why_they_buy returns angle string", isinstance(w.get("angle"), str)
+          and len(w["angle"]) > 10)
+    check("movers map to BookerMove",
+          w.get("recommended_service") == "BookerMove",
+          f"got {w.get('recommended_service')!r}")
+    check("3 pain points -> high confidence",
+          w.get("confidence") == "high", f"got {w.get('confidence')}")
+    check("primary_pain is a known weakness tag",
+          w.get("primary_pain") == "no online booking",
+          f"got {w.get('primary_pain')!r}")
+    # Unknown niche -> no service rec, low conf
+    unknown = {"niche": "alpaca whisperer", "pain_points": []}
+    w2 = marko_intel.why_they_buy(unknown)
+    check("unknown niche + no pain -> no service rec + low conf",
+          w2.get("recommended_service") is None and w2.get("confidence") == "low",
+          f"got {w2}")
+
+
+def test_voicemail_and_why_routes():
+    print("test_voicemail_and_why_routes")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [{"id": "L001", "name": "Acme", "owner": "Pat Smith",
+                            "phone": "555-1", "niche": "movers",
+                            "pain_points": ["no online booking"],
+                            "status": "NEW"}]}
+        _seed(tmp, leads=leads)
+        import dashboard
+        dashboard.CAMPAIGNS_FILE = commands.CAMPAIGNS_FILE
+        dashboard.LEADS_FILE = commands.LEADS_FILE
+        dashboard.LOG_FILE = commands.LOG_FILE
+        client = dashboard.app.test_client()
+
+        rv = client.get("/lead/L001/voicemail")
+        check("/voicemail route returns 200", rv.status_code == 200)
+        jv = rv.get_json()
+        check("/voicemail returns script with content",
+              isinstance(jv.get("script"), str) and len(jv["script"]) > 10)
+
+        rw = client.get("/lead/L001/why")
+        check("/why route returns 200", rw.status_code == 200)
+        jw = rw.get_json()
+        check("/why returns angle + recommended_service",
+              jw.get("angle") and jw.get("recommended_service") == "BookerMove",
+              f"got {jw}")
+
+        r404 = client.get("/lead/L999/voicemail")
+        check("/voicemail returns 404 for missing lead",
+              r404.status_code == 404)
+
+
+def test_dnc_excluded_from_call_queue():
+    print("test_dnc_excluded_from_call_queue")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [
+            {"id": "A", "name": "ok", "phone": "555-1", "status": "NEW",
+             "niche": "movers"},
+            {"id": "B", "name": "dnc", "phone": "555-2", "status": "DNC",
+             "niche": "movers"},
+            {"id": "C", "name": "stopped", "phone": "555-3",
+             "status": "DO_NOT_CONTACT", "niche": "movers"},
+            {"id": "D", "name": "booked", "phone": "555-4", "status": "BOOKED",
+             "niche": "movers"},
+            {"id": "E", "name": "not_int", "phone": "555-5",
+             "status": "NOT_INTERESTED", "niche": "movers"},
+        ]}
+        _seed(tmp, leads=leads)
+        q = commands.call_queue(limit=10)
+        ids = [l["id"] for l in q]
+        check("call_queue includes NEW lead", "A" in ids)
+        check("call_queue excludes DNC", "B" not in ids)
+        check("call_queue excludes DO_NOT_CONTACT", "C" not in ids)
+        check("call_queue excludes BOOKED", "D" not in ids)
+        check("call_queue excludes NOT_INTERESTED", "E" not in ids)
+
+
+def test_set_lead_disposition_safety():
+    print("test_set_lead_disposition_safety")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [{"id": "L001", "name": "x", "status": "NEW"}]}
+        _seed(tmp, leads=leads)
+        # Unknown status rejected
+        ok_bad = commands.set_lead_disposition("L001", "WHATEVER")
+        check("set_lead_disposition rejects unknown status", not ok_bad)
+        # Known status accepted
+        ok_good = commands.set_lead_disposition("L001", "BOOKED")
+        check("set_lead_disposition accepts known status", ok_good)
+        after = json.load(open(commands.LEADS_FILE))["leads"]
+        check("disposition saved correctly",
+              after[0]["status"] == "BOOKED", f"got {after[0]['status']}")
+        check("disposition stamps last_attempt_at",
+              after[0].get("last_attempt_at") is not None)
+        # Missing lead
+        ok_missing = commands.set_lead_disposition("L999", "BOOKED")
+        check("set_lead_disposition returns False for missing lead",
+              not ok_missing)
+
+
+def test_pipeline_summary_fields():
+    print("test_pipeline_summary_fields")
+    with tempfile.TemporaryDirectory() as tmp:
+        # 1 MONEY-tier lead, 1 LOW lead, 1 DNC (excluded), 1 CONTACTED 72h ago.
+        now = datetime.now()
+        old = (now - timedelta(hours=72)).isoformat()
+        leads = {"leads": [
+            {"id": "M1", "name": "money", "email": "m@m.com", "phone": "555-1",
+             "website": "https://m.com", "owner": "Pat Smith", "niche": "movers",
+             "city": "Richmond", "state": "VA", "campaign_id": "C001",
+             "contact_type": "both", "source": "scrape", "status": "NEW"},
+            {"id": "L1", "name": "low", "email": "l@l.com", "status": "NEW"},
+            {"id": "D1", "name": "dnc", "phone": "555-9", "status": "DNC"},
+            {"id": "F1", "name": "follow", "email": "f@f.com", "phone": "555-2",
+             "status": "CONTACTED", "last_attempt_at": old},
+        ]}
+        _seed(tmp, leads=leads)
+        s = commands.pipeline_summary()
+        check("pipeline_summary counts MONEY tier",
+              s["money_count"] >= 1, f"got {s['money_count']}")
+        check("pipeline_summary excludes DNC from tier counts",
+              s["money_count"] + s["hot_count"] + s["good_count"]
+              + s["low_count"] + s["dead_count"] == 3,  # M1, L1, F1
+              f"got tier sum {s}")
+        check("pipeline_summary detects overdue follow-up",
+              s["followups_overdue"] >= 1, f"got {s['followups_overdue']}")
+        check("pipeline_summary returns followup window",
+              s.get("followup_window_hours") == commands.FOLLOWUP_OVERDUE_HOURS)
+
+
 def main():
     test_subpage_extraction()
     test_dedup()
@@ -587,10 +844,19 @@ def main():
     test_owner_extractor()
     test_pain_points()
     test_campaign_preset_route()
+    test_export_csv_is_read_only()
+    test_report_and_money_mode_are_read_only()
     test_marko_intel_money_estimate()
     test_marko_intel_script()
     test_marko_intel_email()
+    test_intel_and_compliance_are_read_only()
     test_intel_and_email_routes()
+    test_marko_intel_voicemail()
+    test_marko_intel_why_they_buy()
+    test_voicemail_and_why_routes()
+    test_dnc_excluded_from_call_queue()
+    test_set_lead_disposition_safety()
+    test_pipeline_summary_fields()
     fails = [(n, d) for n, ok, d in results if not ok]
     print(f"\n{len(results) - len(fails)}/{len(results)} passed")
     if fails:

@@ -188,6 +188,12 @@
       "count": 21,
       "campaign_id": null,
       "status": null
+    },
+    {
+      "timestamp": "2026-05-12T21:58:23.087006",
+      "action": "lead_status",
+      "lead_id": "L001",
+      "status": "INTERESTED"
     }
   ]
 }

@@ -732,15 +732,43 @@ def score_lead(lead):
 
 
 def annotate_leads(leads):
-    """Return a list of (lead, score_dict) tuples, score added in-place too."""
+    """Return a list of (lead, score_dict) tuples, score added in-place too.
+
+    N182: also injects `_offer` (recommended offer dict from marko_intel)
+    so Money Mode views can render pipeline totals without re-importing.
+    Pure read of the lead; no persistence.
+    """
+    import marko_intel as mi
     out = []
     for l in leads:
         s = score_lead(l)
         l["_score"] = s["score"]
         l["_label"] = s["label"]
         l["_signals"] = s["signals"]
+        l["_offer"] = mi.recommend_offer(l)
         out.append((l, s))
     return out
+
+
+def pipeline_total(leads, statuses=("CONTACTED", "INTERESTED")):
+    """N182: sum of _offer.price across leads in the given statuses.
+
+    Operator pipeline value = setup fees already in the closing window.
+    Recurring monthly is intentionally NOT summed here — pipeline is one-time.
+    """
+    import marko_intel as mi
+    target = {s.upper() for s in statuses}
+    total = 0
+    counted = 0
+    for l in leads:
+        if (l.get("status") or "").upper() not in target:
+            continue
+        offer = l.get("_offer") or mi.recommend_offer(l)
+        price = int(offer.get("price") or 0)
+        if price > 0:
+            total += price
+            counted += 1
+    return {"total": total, "count": counted}
 
 
 def call_queue(limit=20):

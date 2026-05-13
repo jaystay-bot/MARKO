@@ -43,3 +43,9 @@ python cli.py scrape <niche> <city> <state>
 - `marko_log.json` - Action log
 - `templates.json` - Outreach/campaign/niche presets
 - `smoke_test.py` - Local smoke tests (no network)
+
+## Mutation Rules
+
+- CSV export helpers are read-only. They return CSV strings and do not update lead, campaign, or log JSON.
+- Intel and compliance helpers are read-only. They may return generated scripts, email previews, blockers, and checklist data, but they do not persist state.
+- Status/disposition helpers, retry reset, send, campaign creation, and template creation intentionally mutate JSON and write audit entries where applicable.

@@ -243,6 +243,21 @@ def run_tests():
             else:
                 check("27. email preview button (no call cards, skipped)", True)
 
+            # 28. N181 MAKE MONEY TODAY section present
+            money_section = page.locator("section.money-section")
+            check("28. MAKE MONEY TODAY section visible",
+                  money_section.count() >= 1
+                  and "MAKE MONEY TODAY" in money_section.text_content())
+
+            # 29. N182 5-tier scoring CSS — at least one of MONEY/HOT/GOOD/LOW/DEAD
+            #     score classes is in the rendered HTML (existing leads should
+            #     score somewhere on the new scale).
+            content = page.content()
+            tiers_seen = [t for t in ("score-MONEY","score-HOT","score-GOOD",
+                                       "score-LOW","score-DEAD") if t in content]
+            check("29. 5-tier score CSS classes used on page",
+                  len(tiers_seen) >= 1, f"tiers seen: {tiers_seen}")
+
         finally:
             browser.close()
 

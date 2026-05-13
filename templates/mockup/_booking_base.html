@@ -1,0 +1,9 @@
+<div class="mk mk-booking">
+  <h2 class="mk-name">{{ name }}</h2>
+  <div class="mk-sub">{{ city }}{% if state %}, {{ state }}{% endif %} · {{ tagline }}</div>
+  <a class="mk-cta mk-cta-book" href="#book">{{ book_label|default('Book Online · Pick Your Time') }}</a>
+  <div class="mk-feat">→ {{ feat1 }}</div>
+  <a class="mk-cta mk-cta-phone" href="tel:{{ phone }}">Prefer to call? {{ phone }}</a>
+  <div class="mk-feat">→ {{ feat2 }}</div>
+  <div class="mk-foot">Mockup of what we'd build for {{ name }}. Uses only public business data.</div>
+</div>

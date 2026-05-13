@@ -444,6 +444,208 @@ def daily_brief(call_queue_leads, sender_name="Jay", limit=10):
     return brief
 
 
+# ---------- N182: Leak Report + Offer Recommendation ----------
+#
+# Turns the raw pain_points tag list into a salable artifact:
+#   compute_leaks(lead)     -> {confirmed, inferred, needs_check}
+#   recommend_offer(lead)   -> {kind, price, monthly, basis}
+#   niche_key(niche_str)    -> mockup-template slug
+#   mockup_variant(...)     -> "emergency" or "booking"
+#
+# All pure functions. No I/O. No network. No mutation of inputs.
+# Whitelisted fields enforced downstream (dashboard route).
+
+# Tag -> (human label, basis phrase). Confirmed only when site-scan evidence exists.
+LEAK_LABELS = {
+    "no contact form":   ("No after-hours intake on the website",
+                          "site scan: no <form> on landing page"),
+    "no online booking": ("No online booking / quote button",
+                          "site scan: no booking keywords"),
+    "weak mobile":       ("Site not mobile-optimized",
+                          "site scan: no viewport meta tag"),
+    "no SSL":            ("Site still on http — flagged 'not secure'",
+                          "URL scheme check"),
+    "no social presence":("No Facebook/Instagram/TikTok links",
+                          "site scan: no social URLs in page"),
+    "empty page":        ("Website fails to load real content",
+                          "page body was empty when fetched"),
+}
+
+# Niches where missed-call risk is a legitimate inferred leak (high-ticket urgency).
+HIGH_VALUE_NICHE_NEEDLES = ("plumb", "hvac", "mover", "moving",
+                            "roof", "tow", "restoration")
+
+
+def _is_high_value(niche):
+    if not niche:
+        return False
+    nl = niche.lower()
+    return any(n in nl for n in HIGH_VALUE_NICHE_NEEDLES)
+
+
+def compute_leaks(lead):
+    """Return a structured leak report split by confidence label.
+
+    Output:
+        {
+          "confirmed":   [{label, basis, tag}],
+          "inferred":    [{label, basis, tag}],
+          "needs_check": [{label, basis, tag}],
+        }
+
+    Confirmed = site-scan evidence (pain_points already proves it).
+    Inferred  = derived from niche + lead shape, owner should sanity-check.
+    Needs_check = pain we can't verify without acting (e.g. submitting a form).
+    """
+    pain = lead.get("pain_points") or []
+    if isinstance(pain, str):
+        pain = [pain]
+
+    confirmed = []
+    inferred = []
+    needs_check = []
+
+    for tag in pain:
+        if tag in LEAK_LABELS:
+            label, basis = LEAK_LABELS[tag]
+            confirmed.append({"tag": tag, "label": label, "basis": basis})
+        elif tag.startswith("site error"):
+            confirmed.append({"tag": tag, "label": f"Site is broken — {tag}",
+                              "basis": "HTTP status check"})
+        elif tag.startswith("copyright "):
+            inferred.append({"tag": tag, "label": f"Stale website ({tag})",
+                             "basis": "footer copyright year"})
+
+    # Inferred: missed-call risk on high-ticket urgency niches.
+    niche = (lead.get("niche") or "").strip()
+    if _is_high_value(niche) and lead.get("phone"):
+        inferred.append({
+            "tag": "missed-call risk",
+            "label": "Likely missing inbound calls during business hours",
+            "basis": f"high-ticket {niche} — needs human verification "
+                     f"(call the number twice to confirm)",
+        })
+
+    # Needs-check: speed-to-lead is only verifiable by submitting a form.
+    if "no contact form" not in pain:
+        needs_check.append({
+            "tag": "speed-to-lead",
+            "label": "Speed-to-lead on form submissions",
+            "basis": "cannot verify without submitting a test form",
+        })
+
+    return {
+        "confirmed": confirmed,
+        "inferred": inferred,
+        "needs_check": needs_check,
+    }
+
+
+# Offer catalog. price = one-time setup. monthly = recurring (0 = none).
+OFFER_BOOKERMOVE   = {"kind": "BookerMove Setup", "price": 1500, "monthly": 99}
+OFFER_TALKBOT      = {"kind": "TalkBot Setup",    "price": 497,  "monthly": 99}
+OFFER_QUOTE_INTAKE = {"kind": "Quote Intake Page","price": 497,  "monthly": 0}
+OFFER_LANDING      = {"kind": "Mini Landing Page Rebuild",
+                      "price": 797, "monthly": 0}
+OFFER_AUDIT        = {"kind": "Free Lead Audit",  "price": 0,    "monthly": 0}
+
+
+def recommend_offer(lead):
+    """Pick the single best offer for a lead. Pure read of pain_points + niche.
+
+    Returns {kind, price, monthly, basis}. price/monthly are USD.
+    `basis` is a one-line justification the operator can read aloud.
+    """
+    pain = lead.get("pain_points") or []
+    if isinstance(pain, str):
+        pain = [pain]
+    high_value = _is_high_value(lead.get("niche"))
+
+    if "no contact form" in pain and high_value:
+        return {**OFFER_BOOKERMOVE,
+                "basis": "no after-hours intake + high-ticket niche"}
+    if "no online booking" in pain and high_value:
+        return {**OFFER_BOOKERMOVE,
+                "basis": "no online booking + high-ticket niche"}
+    if "no contact form" in pain:
+        return {**OFFER_TALKBOT, "basis": "no after-hours intake on site"}
+    if "no online booking" in pain:
+        return {**OFFER_QUOTE_INTAKE,
+                "basis": "no online booking on site"}
+    if "weak mobile" in pain or "no SSL" in pain or "empty page" in pain:
+        return {**OFFER_LANDING,
+                "basis": "broken or non-mobile site"}
+    # Default soft pitch
+    return {**OFFER_AUDIT, "basis": "no concrete leak yet — open with an audit"}
+
+
+# Mockup template slug routing. Order matters; first hit wins.
+NICHE_SLUG_RULES = (
+    ("plumb",    "plumbers"),
+    ("hvac",     "hvac"),
+    ("mover",    "movers"),
+    ("moving",   "movers"),
+    ("roof",     "roofers"),
+    ("med spa",  "med_spas"),
+    ("medspa",   "med_spas"),
+    ("groomer",  "groomers"),
+    ("grooming", "groomers"),
+    ("mechanic", "auto_shops"),
+    ("auto",     "auto_shops"),
+    ("detail",   "detailers"),
+    ("tow",      "towing"),
+    ("barber",   "salons"),
+    ("salon",    "salons"),
+    ("hair",     "salons"),
+)
+
+MOCKUP_NICHES = ("plumbers", "hvac", "movers", "roofers", "towing",
+                 "groomers", "auto_shops", "med_spas", "detailers", "salons")
+
+PRIMARY_VARIANT = {
+    "plumbers":   "emergency",
+    "hvac":       "emergency",
+    "towing":     "emergency",
+    "movers":     "emergency",
+    "roofers":    "emergency",
+    "med_spas":   "booking",
+    "salons":     "booking",
+    "groomers":   "booking",
+    "auto_shops": "booking",
+    "detailers":  "booking",
+}
+
+
+def niche_key(niche):
+    """Map a free-text niche string to a mockup-template slug, or None."""
+    if not niche:
+        return None
+    nl = niche.lower()
+    for needle, slug in NICHE_SLUG_RULES:
+        if needle in nl:
+            return slug
+    return None
+
+
+def mockup_variant(lead, override=None):
+    """Pick mockup variant for a lead. Override accepted from query string."""
+    if override in ("emergency", "booking"):
+        return override
+    slug = niche_key(lead.get("niche"))
+    return PRIMARY_VARIANT.get(slug, "booking")
+
+
+def whitelisted_lead(lead):
+    """Strip a lead down to the five fields the mockup is allowed to read."""
+    return {
+        "name":  (lead.get("name")  or "").strip() or "Your Business",
+        "city":  (lead.get("city")  or "").strip() or "—",
+        "state": (lead.get("state") or "").strip() or "",
+        "phone": (lead.get("phone") or "").strip() or "—",
+        "niche": (lead.get("niche") or "").strip() or "local business",
+    }
+
+
 if __name__ == "__main__":
     # Smoke test: load real leads, build a brief, print a sample.
     import json
