@@ -6,6 +6,25 @@
 - Skipped: N038 Rust lane (no measured bottleneck), N051–N060 8 parallel agents (theater).
 - Deploy: GitHub→Vercel auto, READY in 12s.
 
+## 2026-05-12 — N271: storage abstraction (local + kv backends)
+**PASS.** Live: `marko-teal.vercel.app` commit `c0a902a`.
+- storage.py: read_json/write_json API, STORAGE_BACKEND=local|kv switch.
+- Local backend = default = current file-on-disk behavior (atomic tmp+rename).
+- KV backend = Upstash Redis via stdlib urllib REST (no new deps).
+- _kv_key_from_path: leads.json -> marko:leads. Same call sites serve both.
+- StorageNotConfigured raised when STORAGE_BACKEND=kv but creds missing.
+- is_persistent() returns False on local+Vercel and kv-without-creds.
+- Routed every JSON file access through storage:
+  commands.load_json/save_json delegate; dashboard, scraper, enrich_batch
+  go through commands. FileNotFoundError contract preserved.
+- Banner now keyed off is_persistent (was: is_vercel). Live banner copy
+  names STORAGE_BACKEND=kv + links to README.
+- Tests: 268/268 smoke (+19 new), 39/39 Playwright. vercel build ok.
+- README: 4-step Vercel persistence enable section.
+- Operator next: provision Upstash via Vercel Marketplace, set
+  STORAGE_BACKEND=kv in env, redeploy -> banner disappears, writes
+  persist across cold starts.
+
 ## 2026-05-12 — N262: polish pass (find_lead + orphan wiring + perf snapshot)
 **PASS.** Live: `marko-teal.vercel.app` commit `5a09af2`.
 - 249/249 smoke. 34/34 Playwright (added: welcome partial renders, FCP under 5s).
