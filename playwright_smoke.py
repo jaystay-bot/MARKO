@@ -329,6 +329,35 @@ def run_tests():
                   f"transfer {transfer_kb}KB exceeds budget {PERF_BUDGET_TRANSFER_KB}KB "
                   f"— check for new bundled assets / inline CSS bloat; full timing={timing}")
 
+            # 35-37. N269: per-route perf budgets. Secondary pages share the
+            # same _layout.html (Inter font cached after the home hit) so
+            # their transfer sizes should be a fraction of the home page.
+            # Single FCP budget reused — the assets are shared.
+            ROUTE_BUDGETS = [
+                ("35. /lead/L001/leak", "/lead/L001/leak",  200),
+                ("36. /lead/L001/pitch", "/lead/L001/pitch", 200),
+                ("37. /m/lead/L001",    "/m/lead/L001",    100),
+            ]
+            for label, path, max_kb in ROUTE_BUDGETS:
+                page.goto(BASE_URL + path, wait_until="networkidle")
+                t = page.evaluate("""() => {
+                    const nav = performance.getEntriesByType('navigation')[0] || {};
+                    const paint = performance.getEntriesByType('paint') || [];
+                    const fcp = (paint.find(p => p.name === 'first-contentful-paint') || {}).startTime;
+                    return {
+                        fcp_ms: fcp ? Math.round(fcp) : null,
+                        transfer_kb: nav.transferSize ? Math.round(nav.transferSize / 1024) : null,
+                    };
+                }""")
+                rfcp = t.get("fcp_ms") or 0
+                rkb = t.get("transfer_kb") or 0
+                check(
+                    f"{label} budget (FCP<{PERF_BUDGET_FCP_MS}ms, "
+                    f"transfer<{max_kb}KB) got FCP={rfcp}ms transfer={rkb}KB",
+                    0 < rfcp < PERF_BUDGET_FCP_MS and 0 < rkb < max_kb,
+                    f"route timing={t}",
+                )
+
         finally:
             browser.close()
 

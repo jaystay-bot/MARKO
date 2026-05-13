@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ page_title|default('MARKO') }}</title>
+<link rel="preload" as="font" type="font/woff2" href="/static/InterVariable.woff2" crossorigin>
 <style>
   @font-face {
     font-family: "InterVar";
@@ -142,7 +143,10 @@
   .m-actions form{margin:0}
   .m-actions .btn{width:100%;padding:14px;min-height:48px;display:flex;align-items:center;justify-content:center}
   @media(max-width:640px){main{padding:12px}header h1{font-size:14px;letter-spacing:0.14em}.section{padding:12px}
-    header{padding:10px 14px}}
+    header{padding:10px 14px}
+    /* N268: keep .seq-pill tight on phones (used in /m/lead and the chrome pages) */
+    .seq-pill{font-size:10px;padding:2px 7px;white-space:nowrap;max-width:60vw;
+              overflow:hidden;text-overflow:ellipsis}}
 </style>
 </head>
 <body>

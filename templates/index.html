@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MARKO</title>
+    <link rel="preload" as="font" type="font/woff2" href="/static/InterVariable.woff2" crossorigin>
     <style>
         @font-face {
             font-family: "InterVar";
@@ -405,6 +406,10 @@
             /* Tap targets */
             .call-card button, .call-card .btn, .call-card form button { min-height: 36px; }
             .money-hero { grid-template-columns: repeat(2, 1fr); }
+            /* N268: keep .seq-pill on one line + slightly tighter beside .score-badge */
+            .seq-pill { font-size: 10px; padding: 2px 7px; white-space: nowrap;
+                        max-width: 60vw; overflow: hidden; text-overflow: ellipsis; }
+            .call-card .row1 .seq-pill { letter-spacing: 0; }
         }
     </style>
 </head>
@@ -426,9 +431,9 @@
         </nav>
     </header>
     <main>
-        {% if is_vercel %}
+        {% if not is_persistent %}
         <div class="msg" style="background:#7a4a00; color:#fff;">
-            ⚠ Vercel demo mode: JSON storage may not persist between requests on serverless. Use local mode (<code>python dashboard.py</code>) for real campaigns.
+            ⚠ Demo mode: writes won't persist (local backend on serverless). Set <code>STORAGE_BACKEND=kv</code> + Upstash creds to flip on persistence — see <a href="https://github.com/jaystay-bot/MARKO#persistent-storage-on-vercel" style="color:#fff; text-decoration:underline;">README</a>.
         </div>
         {% endif %}
         {% if message %}<div class="msg">{{ message }}</div>{% endif %}
