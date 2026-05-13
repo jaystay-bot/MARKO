@@ -161,6 +161,9 @@ VALID_EVENTS = (
     "followup_sent",     # 4 -> 5
     "final_bump_sent",   # 5 -> done
     "reset",             # back to 0
+    # N275A: inbound email reply terminates the sequence. Same end-state as
+    # 'interested' — the lead engaged, stop the drip, surface to Jay.
+    "replied",
 )
 
 
@@ -213,7 +216,7 @@ def advance_for_event(lead, event, now=None):
         updates["sequence_step"] = STEP_FOLLOWUP_DUE
         updates["sequence_next_at"] = _at(WAIT_AFTER[STEP_VOICEMAIL_LEFT])
     elif event in ("interested", "booked", "callback",
-                   "not_interested", "dnc"):
+                   "not_interested", "dnc", "replied"):
         updates["sequence_done"] = True
         updates["sequence_next_at"] = None
     elif event == "followup_sent":

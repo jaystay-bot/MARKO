@@ -1042,7 +1042,7 @@
             </div>
             <div style="margin-top:12px;" class="row">
                 <form action="/send" method="post" class="row">
-                    <button type="submit">Send Batch</button>
+                    <button type="submit">Send Email Batch</button>
                     <label style="font-size:12px;color:var(--muted);"><input type="checkbox" name="dry_run" value="1"> dry run</label>
                 </form>
                 <form action="/analyze" method="post" class="inline">
@@ -1083,7 +1083,75 @@
         </section>
 
         <section class="section" id="leads">
-            <h2>Leads ({{ leads|length }}) <a class="btn muted" href="/export/leads.csv" style="float:right;">Export CSV</a></h2>
+            <h2>Leads ({{ leads|length }})
+                <span style="float:right;">
+                    <a class="btn muted" href="/export/call_today.csv" title="Phone-ready leads only, ranked by closability">Export Call Today</a>
+                    <a class="btn muted" href="/export/pitch_pack_today.zip" title="Top 10 call-today as one zip — email + mockup + leak report per lead">Pitch Pack Today (.zip)</a>
+                    <form action="/owners/refresh" method="post" style="display:inline;">
+                        <button type="submit" class="btn muted" title="Background sweep — re-fetches every lead with owner=null and tries to extract a name from /about pages.">Refresh Owners</button>
+                    </form>
+                    <a class="btn muted" href="/export/leads.csv">Export CSV</a>
+                </span>
+            </h2>
+            {# N274: last-refresh banner — shown when a finished sweep is on disk. #}
+            {% if refresh_status and refresh_status.last_result %}
+            <div class="message" style="margin:6px 0; padding:6px 10px; background:#1d2530; border-left:3px solid #5ab; font-size:12px;">
+                {% set lr = refresh_status.last_result %}
+                {% if lr.error %}
+                    Owners refresh last run: ERROR — {{ lr.error }}
+                {% else %}
+                    Owners refresh last run: discovered {{ lr.updated|default(0) }} / scanned {{ lr.scanned|default(0) }} / errors {{ lr.errors|default(0) }}
+                    {% if refresh_status.last_result_age is not none %}<span style="color:var(--muted);">({{ refresh_status.last_result_age }}s ago)</span>{% endif %}
+                {% endif %}
+                {% if refresh_status.running %}<span style="color:#f80;">· refresh currently running</span>{% endif %}
+            </div>
+            {% elif refresh_status and refresh_status.running %}
+            <div class="message" style="margin:6px 0; padding:6px 10px; background:#1d2530; border-left:3px solid #f80; font-size:12px;">
+                Owners refresh running ({{ refresh_status.lock_age }}s) — reload to see results.
+            </div>
+            {% endif %}
+
+            {# N275A: Bot Activity — today's email events. #}
+            {% if email_activity %}
+            <div class="bot-activity" style="margin:10px 0 12px; padding:10px 12px; border:1px solid #2b3441; background:#13191f; border-radius:6px; font-size:12px;">
+                <div style="display:flex; gap:14px; align-items:baseline; flex-wrap:wrap;">
+                    <strong style="color:var(--accent);">Bot Activity (email, today)</strong>
+                    <span><b>{{ email_activity.counts.sent }}</b> sent</span>
+                    <span><b>{{ email_activity.counts.delivered }}</b> delivered</span>
+                    <span><b>{{ email_activity.counts.opened }}</b> opened</span>
+                    <span style="color:#a3eba3;"><b>{{ email_activity.counts.replied }}</b> replied</span>
+                    <span style="color:#f08080;"><b>{{ email_activity.counts.bounced }}</b> bounced</span>
+                    {% if email_activity.counts.complained %}<span style="color:#f08080;"><b>{{ email_activity.counts.complained }}</b> complained</span>{% endif %}
+                </div>
+                {% if email_activity.recent %}
+                <div style="margin-top:6px; color:var(--muted);">recent:
+                    {% for e in email_activity.recent %}
+                    <span style="margin-right:10px;"><span class="pill" style="font-size:10px;">{{ e.event }}</span> {{ e.lead_id or '?' }} <span style="color:#666;">{{ e.ts[11:16] }}</span></span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {# N274: Money Lane — read-only top-5 strip. #}
+            {% if call_today_top5 %}
+            <div class="money-lane" style="display:flex; gap:8px; flex-wrap:wrap; margin:10px 0 14px;">
+                {% for c in call_today_top5 %}
+                {% set L = c.lead %}
+                <div class="lane-card" style="flex:1 1 260px; min-width:260px; padding:10px; border:1px solid #2b3441; border-left:3px solid {% if c.label == 'MONEY' %}#f6c84a{% elif c.label == 'HOT' %}#ef6f4d{% else %}#5ab{% endif %}; background:#161c25; border-radius:6px; font-size:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                        <a href="tel:{{ L.phone }}" style="font-weight:700; font-size:14px; color:#9cdcfe; text-decoration:none;">{{ L.phone }}</a>
+                        <span class="pill" style="font-size:10px;">{{ c.label }} · {{ '%.2f'|format(c.closability) }}</span>
+                    </div>
+                    <div style="font-weight:600; color:#eee; margin-bottom:2px;">{{ L.owner or L.name or L.id }}</div>
+                    <div style="color:var(--muted); margin-bottom:4px;">{{ L.niche or '—' }}{% if L.city %} · {{ L.city }}{% endif %}</div>
+                    {% if c.leak_top1 %}<div style="color:#ddd; margin-bottom:6px;">leak: {{ c.leak_top1 }}</div>{% endif %}
+                    <a class="btn muted" style="font-size:11px; padding:2px 8px;" href="/lead/{{ L.id }}/pitch_pack" title="Download email + mockup + leak report">Pitch Pack</a>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             <form action="/add_lead" method="post" class="row" style="margin-bottom:12px;">
                 <input type="text" name="name" placeholder="name" required>
                 <input type="email" name="email" placeholder="email" required>

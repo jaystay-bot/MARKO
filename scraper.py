@@ -19,6 +19,33 @@ CAMPAIGNS_FILE = os.path.join(BASE_DIR, "campaigns.json")
 EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
 PHONE_REGEX = r'(?<!\d)\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)'
 
+# N273: business-name normalizer. Search-engine titles arrive smashed
+# ("PetGroomingInRichmondVA"); these regexes split them back into something
+# Jay can read in a CSV without groaning. Idempotent — a clean name stays clean.
+_NAME_CASE_BOUNDARY = re.compile(r"(?<=[a-z])(?=[A-Z])")
+_NAME_IN_CITY_STATE = re.compile(
+    r"\s*\b[Ii]n\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*,?\s*([A-Z]{2})(?![A-Za-z])"
+)
+_NAME_PIPE_SUFFIX = re.compile(r"\s*\|\s*[^|]+$")
+
+
+def normalize_business_name(raw):
+    """Clean a business name pulled from a search-result title.
+
+    a) insert space at lowercase->uppercase boundaries
+    b) collapse " In <City><State>" into ", <City>, <State>"
+    c) trim a trailing " | <SiteName>" suffix
+    Idempotent.
+    """
+    if not raw:
+        return raw
+    s = raw.strip()
+    s = _NAME_PIPE_SUFFIX.sub("", s).strip()
+    s = _NAME_CASE_BOUNDARY.sub(" ", s)
+    s = _NAME_IN_CITY_STATE.sub(r", \1, \2", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
 SUBPAGES = ['/contact', '/contact-us', '/about', '/about-us', '/services']
 
 # Filter lists
@@ -215,8 +242,10 @@ def scrape(niche, city, state, max_results=20):
             skipped_junk += 1
             continue
 
-        # Clean business name
+        # Clean business name. N273: also run normalize_business_name to
+        # split camelCase smashing and trailing " | SiteName" tails.
         name = title.split(" - ")[0].split(" | ")[0].split(" :: ")[0].strip()
+        name = normalize_business_name(name)
 
         # Quick dedupe pre-fetch: website domain or name+city already present
         if commands.is_duplicate_lead(leads, name=name, website=url, city=city):

@@ -6,13 +6,13 @@
     "use_tls": true
   },
   "email_template": {
-    "subject": "Quick question about your grooming work",
-    "body": "Hey,\n\nQuick question — when you're working on a breed, do you ever double check blade lengths or cuts just to be sure you're doing it right?\n\nI've been building something specifically for groomers that helps with breed cuts and also lets you see what you're actually making per job without guessing.\n\nIf you're open to it, I can send a quick preview.\n\n– {sender_name}"
+    "subject": "Quick question about beard clients",
+    "body": "Hey,\n\nQuick question \u2014 when you're doing beard work, do you ever feel like clients underestimate how much precision actually goes into it?\n\nI've been building something for barbers/groomers that helps show clients the detail behind the work while also helping shops bring in more repeat bookings.\n\nYour work stood out, so I wanted to reach out.\n\nIf you're open to it, I can send a quick preview.\n\n\u2013 Jay\nBookerMove"
   },
   "sender_name": "Jay",
-  "from_email": "",
-  "unsubscribe_text": "",
-  "physical_address": "",
+  "from_email": "jay@bookermove.com",
+  "unsubscribe_text": "Reply STOP to unsubscribe.",
+  "physical_address": "Jay \u2022 BookerMove\n1050 TEMPLE AVE\nCOLONIAL HEIGHTS, VA 23834",
   "stop_contact_list": [],
   "deliverability": {
     "spf_ok": false,

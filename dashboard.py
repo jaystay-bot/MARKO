@@ -172,6 +172,14 @@ def index():
     is_persistent = storage.is_persistent()
 
     message = request.args.get("message", "")
+
+    # N274: Money Lane strip (top 5 of call-today) + refresh-owners status.
+    call_today_top5 = commands.call_today_top(5)
+    refresh_status = commands.refresh_owners_status()
+
+    # N275A: Bot Activity panel feed (today's email events).
+    email_activity = commands.email_activity_today()
+
     return render_template(
         "index.html",
         campaigns=campaigns,
@@ -205,6 +213,9 @@ def index():
         is_vercel=is_vercel,
         is_persistent=is_persistent,
         message=message,
+        call_today_top5=call_today_top5,
+        refresh_status=refresh_status,
+        email_activity=email_activity,
     )
 
 
@@ -255,6 +266,48 @@ def send():
     if dry:
         result = result + " (dry run)"
     return redirect(url_for("index", message=result))
+
+
+@app.route("/send/schedule", methods=["POST"])
+def send_schedule():
+    """N275C: schedule a one-shot operator-approved marko_send.
+
+    Form/JSON fields: dry_run (default 1 = dry), when (ISO datetime,
+    default now+1m), batch_size_cap (optional int). Concurrent schedules
+    are rejected with 'already scheduled'. One schedule = one execution —
+    the background thread never re-arms.
+    """
+    dry = (request.form.get("dry_run", "1") == "1")
+    when_iso = (request.form.get("when") or "").strip() or None
+    batch_size_cap = (request.form.get("batch_size_cap") or "").strip() or None
+
+    # Compliance gate parity with /send: refuse real scheduled batches when
+    # required compliance fields are missing.
+    if not dry:
+        try:
+            cfg = commands.get_config()
+        except Exception:
+            cfg = {}
+        config_blockers = marko_compliance.config_blockers(cfg)
+        if config_blockers:
+            msg = ("BLOCKED — fix Compliance panel before real sends: "
+                   + "; ".join(config_blockers))
+            return redirect(url_for("index", message=msg))
+
+    res = commands.start_scheduled_send(when_iso=when_iso, dry_run=dry,
+                                        batch_size_cap=batch_size_cap)
+    state = res.get("state")
+    if state == "already scheduled":
+        msg = "Schedule already in flight — wait for it to fire."
+    elif state == "scheduled":
+        fire_at = res.get("fire_at", "?")
+        kind = "dry-run" if dry else "real"
+        msg = f"Scheduled {kind} batch to fire at {fire_at}"
+    elif state == "error":
+        msg = f"Schedule error: {res.get('error', 'unknown')}"
+    else:
+        msg = f"Schedule: {res}"
+    return redirect(url_for("index", message=msg))
 
 
 @app.route("/log", methods=["POST"])
@@ -849,6 +902,22 @@ def export_campaigns():
     )
 
 
+@app.route("/export/call_today.csv")
+def export_call_today():
+    """N273: ranked CSV for same-day phone outreach.
+
+    Filter: phone present, status not in dead-states, do_not_contact != true.
+    Sort:   closability desc -> leak count desc -> score desc.
+    Adds columns: closability, label, leak_top1, leak_top2.
+    """
+    csv_data = commands.export_call_today_csv()
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=call_today.csv"},
+    )
+
+
 @app.route("/template/add", methods=["POST"])
 def template_add():
     name = request.form["name"].strip()
@@ -1019,13 +1088,13 @@ def lead_pitch(lead_id):
                            page_title=f"Pitch — {lead.get('name', lead_id)}")
 
 
-@app.route("/lead/<lead_id>/pitch_pack")
-def lead_pitch_pack(lead_id):
-    """Downloadable ZIP: email.txt + mockup.html + leak_report.md."""
-    lead = _find_lead_or_404(lead_id)
-    if not lead:
-        return Response(f"lead {lead_id} not found", status=404, mimetype="text/plain")
+def _pitch_pack_files(lead):
+    """N274: factored builder for the three pitch-pack files.
 
+    Returns (email_text, mockup_html_doc, report_md, safe_name) for one lead.
+    Pure read; no mutation. Used by both /lead/<id>/pitch_pack and the
+    bulk /export/pitch_pack_today.zip route.
+    """
     sender = _sender_name()
     config = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
     leaks = marko_intel.compute_leaks(lead)
@@ -1033,8 +1102,6 @@ def lead_pitch_pack(lead_id):
     email = marko_intel.generate_email(lead, kind="intro",
                                        sender_name=sender, config=config)
     script = marko_intel.generate_script(lead, sender_name=sender)
-
-    # Render the mockup HTML in isolation so the pack contains a usable preview.
     variant = marko_intel.mockup_variant(lead)
     slug = marko_intel.niche_key(lead.get("niche"))
     wl = marko_intel.whitelisted_lead(lead)
@@ -1048,29 +1115,305 @@ def lead_pitch_pack(lead_id):
                 mockup_html = render_template_string(f.read(), **wl)
         except Exception as exc:
             mockup_html = f"<!-- mockup render failed: {exc} -->"
-
-    email_text = f"To: {lead.get('email') or '(no email on file — use phone)'}\n" \
-                 f"Subject: {email['subject']}\n\n{email['body']}\n\n" \
-                 f"---\nCall opener (if needed):\n{script}\n"
+    email_text = (f"To: {lead.get('email') or '(no email on file — use phone)'}\n"
+                  f"Subject: {email['subject']}\n\n{email['body']}\n\n"
+                  f"---\nCall opener (if needed):\n{script}\n")
+    mockup_doc = ("<!doctype html><meta charset=utf-8>"
+                  "<title>Mockup</title>" + mockup_html)
     report_md = _leak_report_md(lead, leaks, offer)
+    safe_name = "".join(c for c in (lead.get("name") or lead.get("id") or "lead")
+                        if c.isalnum() or c in "-_")[:40] or (lead.get("id") or "lead")
+    return email_text, mockup_doc, report_md, safe_name
 
+
+@app.route("/lead/<lead_id>/pitch_pack")
+def lead_pitch_pack(lead_id):
+    """Downloadable ZIP: email.txt + mockup.html + leak_report.md."""
+    lead = _find_lead_or_404(lead_id)
+    if not lead:
+        return Response(f"lead {lead_id} not found", status=404, mimetype="text/plain")
+    email_text, mockup_doc, report_md, safe_name = _pitch_pack_files(lead)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("email.txt", email_text)
-        zf.writestr("mockup.html",
-                    "<!doctype html><meta charset=utf-8>"
-                    "<title>Mockup</title>" + mockup_html)
+        zf.writestr("mockup.html", mockup_doc)
         zf.writestr("leak_report.md", report_md)
-
     buf.seek(0)
-    safe_name = "".join(c for c in (lead.get("name") or lead_id)
-                        if c.isalnum() or c in "-_")[:40] or lead_id
     return Response(
         buf.getvalue(),
         mimetype="application/zip",
         headers={"Content-Disposition":
                  f'attachment; filename=pitch_pack_{safe_name}.zip'},
     )
+
+
+@app.route("/export/pitch_pack_today.zip")
+def export_pitch_pack_today():
+    """N274: bulk pitch-pack for the top 10 of the call-today ranking.
+
+    One folder per lead (lead_<id>_<safe-name>/) containing email.txt,
+    mockup.html, leak_report.md. Capped at 10 leads so the zip stays
+    under ~2 MB. Reuses _pitch_pack_files so the per-lead output is
+    byte-identical to /lead/<id>/pitch_pack.
+    """
+    top = commands.call_today_top(10)
+    buf = io.BytesIO()
+    n = 0
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for row in top:
+            lead = row["lead"]
+            email_text, mockup_doc, report_md, safe_name = _pitch_pack_files(lead)
+            folder = f"lead_{lead.get('id')}_{safe_name}/"
+            zf.writestr(folder + "email.txt",     email_text)
+            zf.writestr(folder + "mockup.html",   mockup_doc)
+            zf.writestr(folder + "leak_report.md", report_md)
+            n += 1
+    buf.seek(0)
+    fname = f"pitch_pack_today_{n}leads.zip"
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
+def _verify_svix(secret, svix_id, svix_ts, body_bytes, sig_header):
+    """N275B: verify a Resend/Svix signature.
+
+    signed_payload = "{svix_id}.{svix_ts}.{body}"
+    signature      = base64(HMAC_SHA256(secret_bytes, signed_payload))
+    sig_header     = "v1,<base64> v1,<base64> ..."  (rotation support)
+
+    Secret may be raw bytes or a "whsec_<base64>" string — both accepted.
+    Returns (True, None) on a match, (False, reason) otherwise.
+    """
+    import base64 as _b64
+    import hmac as _hmac
+    import hashlib as _hashlib
+    import time as _t
+    if not (svix_id and svix_ts and sig_header):
+        return False, "missing svix headers"
+    # Replay-window — reject anything more than 5 minutes off.
+    try:
+        ts = int(svix_ts)
+    except (TypeError, ValueError):
+        return False, "bad svix-timestamp"
+    if abs(_t.time() - ts) > 300:
+        return False, "svix timestamp outside replay window"
+    # Secret handling — Svix gives "whsec_<b64>"; raw HMAC key is b64-decoded.
+    sec = secret
+    if sec.startswith("whsec_"):
+        try:
+            sec_bytes = _b64.b64decode(sec[len("whsec_"):])
+        except Exception:
+            return False, "bad whsec_ secret"
+    else:
+        sec_bytes = sec.encode("utf-8")
+    signed = f"{svix_id}.{svix_ts}.".encode("utf-8") + body_bytes
+    digest = _hmac.new(sec_bytes, signed, _hashlib.sha256).digest()
+    expected_b64 = _b64.b64encode(digest).decode("ascii")
+    for entry in sig_header.split():
+        if "," not in entry:
+            continue
+        ver, sig = entry.split(",", 1)
+        if ver.strip().lower() != "v1":
+            continue
+        if _hmac.compare_digest(sig.strip(), expected_b64):
+            return True, None
+    return False, "no signature matched"
+
+
+def _extract_lead_id(payload):
+    """N275B: pull lead_id from any of the places it might live.
+
+    Order of preference:
+      1. top-level payload.lead_id
+      2. data.tags.lead_id (Resend's tag style)
+      3. data.lead_id
+      4. data.headers["X-Marko-Lead-Id"] (we now stamp this on every send)
+         — accepts both the dict form {"name":"value"} and the list-of-dicts
+         form [{"name": "...", "value": "..."}]
+    """
+    if payload.get("lead_id"):
+        return payload["lead_id"]
+    data = payload.get("data") or {}
+    tags = data.get("tags") or {}
+    if isinstance(tags, dict) and tags.get("lead_id"):
+        return tags["lead_id"]
+    if data.get("lead_id"):
+        return data["lead_id"]
+    headers = data.get("headers")
+    if isinstance(headers, dict):
+        for k, v in headers.items():
+            if str(k).lower() == "x-marko-lead-id":
+                return v
+    elif isinstance(headers, list):
+        for h in headers:
+            if isinstance(h, dict) and str(h.get("name", "")).lower() == "x-marko-lead-id":
+                return h.get("value")
+    return ""
+
+
+@app.route("/webhook/email", methods=["POST"])
+def webhook_email():
+    """N275A/N275B: receive provider email events.
+
+    Verifies the request via either Svix-style headers (svix-id,
+    svix-timestamp, svix-signature) — the native Resend format — or the
+    legacy X-Marko-Signature header (hex HMAC-SHA256 over the raw body).
+    EMAIL_WEBHOOK_SECRET is the only env var either way. Unsigned or
+    mismatched requests are rejected with 401 and NEVER write to disk.
+
+    Accepts both:
+      - native Resend-style {type: 'email.delivered', data: {...}}
+      - simplified {event: 'opened', lead_id: 'L016'}
+    """
+    import hmac as _hmac
+    import hashlib as _hashlib
+
+    secret = (os.environ.get("EMAIL_WEBHOOK_SECRET") or "").strip()
+    if not secret:
+        return Response("EMAIL_WEBHOOK_SECRET not configured", status=503,
+                        mimetype="text/plain")
+
+    raw = request.get_data() or b""
+    svix_id = request.headers.get("svix-id") or request.headers.get("Svix-Id")
+    svix_ts = request.headers.get("svix-timestamp") or request.headers.get("Svix-Timestamp")
+    svix_sig = request.headers.get("svix-signature") or request.headers.get("Svix-Signature")
+
+    if svix_id or svix_ts or svix_sig:
+        ok, reason = _verify_svix(secret, svix_id, svix_ts, raw, svix_sig or "")
+        if not ok:
+            return Response(f"svix: {reason}", status=401,
+                            mimetype="text/plain")
+    else:
+        provided = (request.headers.get("X-Marko-Signature") or "").strip()
+        if not provided:
+            return Response("missing signature", status=401,
+                            mimetype="text/plain")
+        if provided.lower().startswith("sha256="):
+            provided_hex = provided.split("=", 1)[1].strip()
+        else:
+            provided_hex = provided
+        expected_hex = _hmac.new(secret.encode("utf-8"), raw,
+                                 _hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(provided_hex, expected_hex):
+            return Response("invalid signature", status=401,
+                            mimetype="text/plain")
+
+    # Signature OK — parse payload defensively.
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except Exception as exc:
+        return Response(f"bad json: {exc}", status=400, mimetype="text/plain")
+
+    event_name = (payload.get("event") or payload.get("type") or "").lower()
+    if event_name.startswith("email."):
+        event_name = event_name.split(".", 1)[1]
+    data_blob = payload.get("data") or {}
+    lead_id = _extract_lead_id(payload)
+    meta = {
+        "provider_id": (data_blob.get("email_id")
+                        or data_blob.get("id")
+                        or payload.get("id")),
+        "to": data_blob.get("to") or payload.get("to"),
+    }
+    result = commands.apply_email_event(lead_id, event_name, meta)
+    code = 200 if result.get("ok") else 422
+    return jsonify(result), code
+
+
+@app.route("/admin/send_live_smoke", methods=["POST"])
+def admin_send_live_smoke():
+    """N275B: one-shot live-fire test path.
+
+    Hard-capped to 5 real sends through the production email_client. Gated
+    by ?token= matching the ADMIN_TOKEN env var. Writes each result
+    (message_id on success, error on failure) to marko_log so the operator
+    can verify a real Resend id landed on disk. Designed for first-flight
+    operator confidence; delete the route after the next loop verifies it.
+    """
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if not provided or provided != expected:
+        return Response("forbidden", status=401, mimetype="text/plain")
+
+    if not (os.environ.get("RESEND_API_KEY") or "").strip():
+        return redirect(url_for("index",
+            message="ADMIN_SMOKE blocked: RESEND_API_KEY not set"))
+
+    cfg = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
+    import marko_compliance as _mc
+    blockers = _mc.config_blockers(cfg)
+    if blockers:
+        return redirect(url_for("index",
+            message="ADMIN_SMOKE blocked: " + "; ".join(blockers)))
+
+    from_email = (cfg.get("from_email") or "").strip()
+    sender_name = cfg.get("sender_name") or "Jay"
+    tpl = (cfg.get("email_template") or {})
+    subject_t = tpl.get("subject") or "Quick question"
+    body_t    = tpl.get("body") or "Hi, I wanted to reach out."
+
+    leads = commands.load_json(commands.LEADS_FILE).get("leads", [])
+    batch = [l for l in leads
+             if l.get("email") and l.get("status") in (None, "", "NEW")][:5]
+    if not batch:
+        return redirect(url_for("index",
+            message="ADMIN_SMOKE: no NEW leads with email available"))
+
+    import email_client as _ec
+    results = []
+    for lead in batch:
+        subject = commands.personalize_template(subject_t, lead, sender_name)
+        body    = commands.personalize_template(body_t, lead, sender_name)
+        body    = commands._apply_compliance_footer(body, cfg)
+        res = _ec.send(
+            to=lead.get("email"), subject=subject, body=body,
+            from_=from_email, dry_run=False,
+            headers={"X-Marko-Lead-Id": lead.get("id") or ""},
+        )
+        entry = {"action": "send", "lead_id": lead.get("id"),
+                 "recipient": lead.get("email"),
+                 "kind": "admin_smoke",
+                 "status": "sent" if res["status"] == "sent" else "failed"}
+        if res.get("id"):
+            entry["message_id"] = res["id"]
+        if res.get("error"):
+            entry["error"] = res["error"]
+        commands.log_action(entry)
+        results.append({"id": lead.get("id"), "email": lead.get("email"),
+                        "status": res["status"],
+                        "message_id": res.get("id"),
+                        "error": res.get("error")})
+
+    summary = " · ".join(
+        (f"{r['id']}: {r['message_id']}" if r["status"] == "sent"
+         else f"{r['id']}: FAIL {r['error']}")
+        for r in results
+    )
+    return redirect(url_for("index", message=f"ADMIN_SMOKE: {summary}"))
+
+
+@app.route("/owners/refresh", methods=["POST"])
+def owners_refresh():
+    """N274: kick off a background owner-discovery sweep + redirect.
+
+    The route itself returns instantly. A daemon thread runs the work and
+    writes the summary to .refresh_owners.result.json. If a sweep is already
+    in flight, the request bails with a 'try again in Xs' message.
+    """
+    res = commands.start_refresh_owners()
+    if res["state"] == "running":
+        wait = res.get("wait_seconds", commands.REFRESH_LOCK_TTL)
+        msg = f"Owners refresh already running — try again in {wait}s"
+    else:
+        msg = ("Owners refresh started in background — reload the dashboard "
+               "in ~30s to see results.")
+    return redirect(url_for("index", message=msg))
 
 
 @app.route("/m/lead/<lead_id>")
