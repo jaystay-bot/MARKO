@@ -166,6 +166,9 @@ def index():
     }
 
     is_vercel = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
+    # N271: banner only when writes WON'T persist. is_persistent() returns
+    # True for local-off-Vercel and for kv-with-creds; False for local-on-Vercel.
+    is_persistent = storage.is_persistent()
 
     message = request.args.get("message", "")
     return render_template(
@@ -199,6 +202,7 @@ def index():
         daily_cap=commands.DAILY_SEND_CAP,
         cooldown_minutes=commands.RETRY_COOLDOWN_MINUTES,
         is_vercel=is_vercel,
+        is_persistent=is_persistent,
         message=message,
     )
 

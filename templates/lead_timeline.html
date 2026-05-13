@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MARKO — Timeline {{ lead_id }}</title>
+    <style>
+        :root {
+            --bg: #0d0f10; --panel: #15191c; --panel2: #1c2125;
+            --border: #2a3138; --text: #e6edf3; --muted: #8d99a6;
+            --accent: #00d68f; --link: #4cc2ff; --danger: #ff5c5c;
+            --warn: #ffb627;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            margin: 0; background: var(--bg); color: var(--text); line-height: 1.4;
+        }
+        header {
+            padding: 12px 18px; background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px;
+        }
+        header h1 { margin: 0; font-size: 16px; letter-spacing: 0.06em; color: var(--accent); }
+        header nav a { color: var(--muted); text-decoration: none; font-size: 13px; margin-right: 12px; }
+        header nav a:hover { color: var(--text); }
+        main { padding: 16px; max-width: 920px; margin: 0 auto; }
+        .lead-head {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px; margin-bottom: 16px;
+        }
+        .lead-head h2 { margin: 0 0 4px; font-size: 18px; }
+        .lead-head .meta { color: var(--muted); font-size: 13px; }
+        .lead-head .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn {
+            background: var(--accent); color: #001b10; border: none;
+            padding: 6px 12px; border-radius: 4px; cursor: pointer;
+            font-size: 12px; font-weight: 600; text-decoration: none;
+            display: inline-block;
+        }
+        .btn.muted { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+        .timeline {
+            position: relative; padding-left: 28px; margin: 0;
+            border-left: 2px solid var(--border);
+        }
+        .tl-row {
+            position: relative; padding: 10px 14px; margin-bottom: 6px;
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+        .tl-row::before {
+            content: ""; position: absolute; left: -34px; top: 16px;
+            width: 12px; height: 12px; border-radius: 50%;
+            background: var(--accent); border: 2px solid var(--bg);
+        }
+        .tl-row.send::before          { background: var(--link); }
+        .tl-row.lead_close::before    { background: var(--accent); }
+        .tl-row.sequence_event::before{ background: #c084fc; }
+        .tl-row.lead_status::before   { background: var(--warn); }
+        .tl-row.scrape::before        { background: var(--muted); }
+        .tl-row .tl-head {
+            display: flex; justify-content: space-between; gap: 8px;
+            flex-wrap: wrap; align-items: baseline;
+        }
+        .tl-row .tl-label {
+            font-weight: 600; color: var(--text); font-size: 13px;
+        }
+        .tl-row .tl-ts {
+            font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+            color: var(--muted);
+        }
+        .tl-row .tl-summary {
+            margin-top: 4px; font-size: 13px; color: var(--text);
+        }
+        .tl-row details {
+            margin-top: 6px; background: var(--panel2); border-radius: 4px;
+            padding: 6px 10px;
+        }
+        .tl-row details summary {
+            cursor: pointer; color: var(--muted); font-size: 11px;
+        }
+        .tl-row details pre {
+            margin: 6px 0 0; font-size: 11px; white-space: pre-wrap;
+            color: var(--muted); overflow-x: auto;
+        }
+        .empty { color: var(--muted); padding: 20px; text-align: center; }
+        .pill {
+            display: inline-block; padding: 1px 8px; border-radius: 10px;
+            font-size: 11px; background: var(--panel2); border: 1px solid var(--border);
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>MARKO · Lead Timeline</h1>
+    <nav>
+        <a href="/">← Dashboard</a>
+        <a href="/recap">Recap</a>
+        <a href="/mode/call">📞 Call Mode</a>
+    </nav>
+</header>
+<main>
+    {% if not lead %}
+    <div class="lead-head">
+        <h2>Lead {{ lead_id }} not found</h2>
+        <p class="meta">It may have been deleted or the ID is wrong.</p>
+        <p><a class="btn muted" href="/">Back to dashboard</a></p>
+    </div>
+    {% else %}
+    <div class="lead-head">
+        <h2>
+            {{ lead.name or lead.id }}
+            {% if lead.status %}<span class="pill">{{ lead.status }}</span>{% endif %}
+        </h2>
+        <div class="meta">
+            {% if lead.owner %}<strong>{{ lead.owner }}</strong> · {% endif %}
+            {% if lead.phone %}{{ lead.phone }} · {% endif %}
+            {% if lead.email %}{{ lead.email }} · {% endif %}
+            {% if lead.city %}{{ lead.city }}{% if lead.state %}, {{ lead.state }}{% endif %} · {% endif %}
+            {{ lead.niche or '' }}
+        </div>
+        <div class="actions">
+            <a class="btn" href="/lead/{{ lead.id }}/intel">Intel JSON</a>
+            {% if lead.phone %}<a class="btn" href="tel:{{ lead.phone }}">📞 Call</a>{% endif %}
+            <a class="btn muted" href="/mode/call">Open Call Mode</a>
+        </div>
+    </div>
+
+    {% if events %}
+    <ul class="timeline">
+        {% for e in events %}
+        <li class="tl-row {{ e.kind }}">
+            <div class="tl-head">
+                <span class="tl-label">{{ e.label }} · {{ e.kind }}</span>
+                <span class="tl-ts">{{ e.ts[:19].replace('T',' ') }}</span>
+            </div>
+            <div class="tl-summary">{{ e.summary }}</div>
+            {% if e.raw and e.raw|length > 2 %}
+            <details>
+                <summary>raw event</summary>
+                <pre>{{ e.raw|tojson(indent=2) }}</pre>
+            </details>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty">No events yet for this lead.</div>
+    {% endif %}
+    {% endif %}
+</main>
+</body>
+</html>

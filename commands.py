@@ -8,6 +8,8 @@ import smtplib
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
 
+import storage
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CAMPAIGNS_FILE = os.path.join(BASE_DIR, "campaigns.json")
 LEADS_FILE = os.path.join(BASE_DIR, "leads.json")
@@ -50,22 +52,19 @@ FOLLOWUP_OVERDUE_HOURS = 48
 
 
 def load_json(filepath):
-    with open(filepath, "r") as f:
-        return json.load(f)
+    """N271: delegates to storage.read_json so the same call site serves both
+    the local (file-on-disk) and kv (Upstash Redis) backends. Behavior on
+    missing path is unchanged -- still raises FileNotFoundError so existing
+    call sites that don't guard with os.path.exists() get the same exception.
+    """
+    return storage.read_json(filepath)
 
 
 def save_json(filepath, data):
-    """Atomic JSON write.
-
-    N083: write to <filepath>.tmp first, then os.replace() into place.
-    os.replace is atomic on POSIX and Windows (Python >=3.3), so a crash
-    or process kill mid-write cannot leave a partially written file —
-    readers either see the old version or the new version, never garbage.
+    """N271: delegates to storage.write_json. Local backend keeps the same
+    atomic tmp+rename semantics as before. KV backend issues a single SET.
     """
-    tmp_path = filepath + ".tmp"
-    with open(tmp_path, "w") as f:
-        json.dump(data, f, indent=2)
-    os.replace(tmp_path, filepath)
+    return storage.write_json(filepath, data)
 
 
 def get_config():
@@ -1668,3 +1667,255 @@ def discard_pending(lead_id):
                         "lead_id": lead_id, "kind": kind})
             return True
     return False
+
+
+# ---------- N197: Lead timeline + daily recap (pure reads) ----------
+#
+# Stitches marko_log.json events + lead-record fields into one chronological
+# view per lead, and aggregates a daily brief. Read-only — nothing here
+# writes to disk.
+
+# Event kind -> short human label for the timeline glyph + summary.
+TIMELINE_KIND_LABEL = {
+    "scrape":                  "🔍 scrape",
+    "send":                    "📧 email",
+    "lead_status":             "🏷 disposition",
+    "sequence_event":          "↪ sequence",
+    "lead_close":              "💰 close",
+    "pending_send_staged":     "📋 staged",
+    "pending_send_staged_batch": "📋 staged batch",
+    "pending_send_discarded":  "🗑 discarded",
+    "sequence_batch_start":    "↪ batch start",
+    "config_update":           "⚙ config",
+    "export":                  "📤 export",
+    "retry_pending":           "♻ retry",
+    "campaign_archive":        "🗄 archive",
+}
+
+
+def _event_summary(entry, lead=None):
+    """One-line human summary of a log entry, lead-aware when possible."""
+    action = entry.get("action") or ""
+    if action == "send":
+        status = entry.get("status") or ""
+        if status == "sent":
+            kind = entry.get("kind") or ""
+            return f"sent{(' ' + kind) if kind else ''} email"
+        if status == "failed":
+            return f"send failed: {entry.get('error') or 'unknown'}"
+        if status == "retry":
+            return f"transient SMTP retry (code {entry.get('smtp_code')})"
+        if status == "dry-run":
+            return f"dry-run {entry.get('kind') or 'send'}"
+        return f"send: {status}"
+    if action == "lead_status":
+        return f"disposition -> {entry.get('status')}"
+    if action == "sequence_event":
+        ev = entry.get("event") or "?"
+        step = entry.get("step")
+        done = entry.get("done")
+        bits = [f"event={ev}"]
+        if step is not None:
+            bits.append(f"step={step}")
+        if done:
+            bits.append("done")
+        return " ".join(bits)
+    if action == "lead_close":
+        st = entry.get("status") or "?"
+        mrr = entry.get("mrr_value") or 0
+        return f"{st}{f' (${mrr}/mo)' if mrr else ''}"
+    if action == "pending_send_staged":
+        return f"staged {entry.get('kind') or 'email'} (step {entry.get('step')})"
+    if action == "pending_send_discarded":
+        return f"discarded staged {entry.get('kind') or 'email'}"
+    if action == "scrape":
+        n = entry.get("results") or entry.get("count")
+        return f"scrape{f' added {n}' if n else ''}"
+    if action == "config_update":
+        fields = entry.get("fields") or []
+        return f"updated config: {', '.join(fields) if fields else 'compliance'}"
+    if action == "export":
+        return f"export {entry.get('scope') or ''} ({entry.get('count') or 0} rows)"
+    return action or "event"
+
+
+def lead_timeline(lead_id):
+    """All events touching one lead, chronologically.
+
+    Combines marko_log.json entries where lead_id matches with implicit
+    lead-record milestones (created_at, sequence_started_at, closed_at).
+    Returns list of {ts, kind, label, summary, raw} sorted ascending.
+    """
+    if not lead_id:
+        return []
+    log = load_json(LOG_FILE).get("log", [])
+    leads = load_json(LEADS_FILE).get("leads", [])
+    lead = next((l for l in leads if l.get("id") == lead_id), None)
+
+    events = []
+    if lead and lead.get("created_at"):
+        events.append({
+            "ts":      lead["created_at"],
+            "kind":    "lead_created",
+            "label":   "✨ created",
+            "summary": f"lead added (source: {lead.get('source') or 'unknown'})",
+            "raw":     {"action": "lead_created", "source": lead.get("source")},
+        })
+    if lead and lead.get("sequence_started_at"):
+        events.append({
+            "ts":      lead["sequence_started_at"],
+            "kind":    "sequence_start",
+            "label":   "▶ seq start",
+            "summary": "outbound sequence started",
+            "raw":     {"action": "sequence_start"},
+        })
+    if lead and lead.get("closed_at"):
+        won = bool(lead.get("closed_won"))
+        mrr = int(lead.get("mrr_value") or 0)
+        events.append({
+            "ts":      lead["closed_at"],
+            "kind":    "lead_close",
+            "label":   "💰 close",
+            "summary": ("CLOSED_WON" + (f" (${mrr}/mo)" if mrr else "")) if won
+                       else "CLOSED_LOST",
+            "raw":     {"action": "lead_close", "won": won, "mrr_value": mrr},
+        })
+
+    for entry in log:
+        if entry.get("lead_id") != lead_id:
+            continue
+        ts = entry.get("timestamp") or ""
+        action = entry.get("action") or "event"
+        events.append({
+            "ts":      ts,
+            "kind":    action,
+            "label":   TIMELINE_KIND_LABEL.get(action, "·"),
+            "summary": _event_summary(entry, lead=lead),
+            "raw":     entry,
+        })
+
+    events.sort(key=lambda e: e.get("ts") or "")
+    return events
+
+
+def daily_recap(date_str=None):
+    """Aggregate everything MARKO did on one calendar day.
+
+    Default = today. Returns dict the recap.html template renders directly.
+    Always reads from current marko_log + leads.json; never caches.
+    """
+    if date_str:
+        target = date_str
+    else:
+        target = datetime.now().strftime("%Y-%m-%d")
+
+    log = load_json(LOG_FILE).get("log", [])
+    leads = load_json(LEADS_FILE).get("leads", [])
+
+    events_today = [e for e in log if (e.get("timestamp") or "").startswith(target)]
+
+    sends_sent = sends_failed = sends_dry = sends_retry = 0
+    by_disposition = {}
+    sequence_events = {}
+    closes_won = closes_lost = 0
+    mrr_won_today = 0
+    pending_staged = 0
+    pending_discarded = 0
+    config_updates = 0
+    scrapes_run = 0
+    scrape_added = 0
+    exports_run = 0
+    touches_by_lead = {}
+
+    for e in events_today:
+        action = e.get("action") or ""
+        lid = e.get("lead_id")
+        if lid:
+            touches_by_lead[lid] = touches_by_lead.get(lid, 0) + 1
+
+        if action == "send":
+            st = e.get("status") or ""
+            if st == "sent":      sends_sent += 1
+            elif st == "failed":  sends_failed += 1
+            elif st == "dry-run": sends_dry += 1
+            elif st == "retry":   sends_retry += 1
+        elif action == "lead_status":
+            disp = e.get("status") or "?"
+            by_disposition[disp] = by_disposition.get(disp, 0) + 1
+        elif action == "sequence_event":
+            ev = e.get("event") or "?"
+            sequence_events[ev] = sequence_events.get(ev, 0) + 1
+        elif action == "lead_close":
+            if (e.get("status") or "") == "CLOSED_WON":
+                closes_won += 1
+                mrr_won_today += int(e.get("mrr_value") or 0)
+            elif (e.get("status") or "") == "CLOSED_LOST":
+                closes_lost += 1
+        elif action == "pending_send_staged":
+            pending_staged += 1
+        elif action == "pending_send_staged_batch":
+            pending_staged += int(e.get("count") or 0)
+        elif action == "pending_send_discarded":
+            pending_discarded += 1
+        elif action == "config_update":
+            config_updates += 1
+        elif action == "scrape":
+            scrapes_run += 1
+            scrape_added += int(e.get("results") or e.get("count") or 0)
+        elif action == "export":
+            exports_run += 1
+
+    new_leads_today = sum(
+        1 for l in leads
+        if (l.get("created_at") or "").startswith(target)
+    )
+
+    # Top movers: leads with the most events today
+    top_movers = []
+    lead_by_id = {l.get("id"): l for l in leads}
+    for lid, n in sorted(touches_by_lead.items(),
+                         key=lambda x: x[1], reverse=True)[:5]:
+        l = lead_by_id.get(lid) or {}
+        top_movers.append({
+            "id":     lid,
+            "name":   l.get("name") or lid,
+            "status": l.get("status") or "",
+            "events": n,
+        })
+
+    # Compact narrative — one line if everything's zero, otherwise key wins.
+    headline_parts = []
+    if sends_sent:    headline_parts.append(f"{sends_sent} sent")
+    if sends_failed:  headline_parts.append(f"{sends_failed} send fail")
+    if closes_won:    headline_parts.append(f"{closes_won} won (${mrr_won_today}/mo)")
+    if closes_lost:   headline_parts.append(f"{closes_lost} lost")
+    if by_disposition.get("BOOKED"): headline_parts.append(f"{by_disposition['BOOKED']} demo")
+    if new_leads_today: headline_parts.append(f"+{new_leads_today} leads")
+    if scrape_added:  headline_parts.append(f"{scrape_added} scraped")
+    if not headline_parts:
+        headline_parts.append("quiet day")
+    headline = " · ".join(headline_parts)
+
+    return {
+        "date":              target,
+        "headline":          headline,
+        "sends_sent":        sends_sent,
+        "sends_failed":      sends_failed,
+        "sends_dry":         sends_dry,
+        "sends_retry":       sends_retry,
+        "by_disposition":    by_disposition,
+        "sequence_events":   sequence_events,
+        "closes_won":        closes_won,
+        "closes_lost":       closes_lost,
+        "mrr_won_today":     mrr_won_today,
+        "pending_staged":    pending_staged,
+        "pending_discarded": pending_discarded,
+        "config_updates":    config_updates,
+        "scrapes_run":       scrapes_run,
+        "scrape_added":      scrape_added,
+        "exports_run":       exports_run,
+        "new_leads_today":   new_leads_today,
+        "top_movers":        top_movers,
+        "event_count":       len(events_today),
+        "events":            events_today,
+    }

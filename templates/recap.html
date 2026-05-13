@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MARKO — Recap {{ recap.date }}</title>
+    <style>
+        :root {
+            --bg: #0d0f10; --panel: #15191c; --panel2: #1c2125;
+            --border: #2a3138; --text: #e6edf3; --muted: #8d99a6;
+            --accent: #00d68f; --link: #4cc2ff; --danger: #ff5c5c;
+            --warn: #ffb627;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            margin: 0; background: var(--bg); color: var(--text); line-height: 1.4;
+        }
+        header {
+            padding: 12px 18px; background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            flex-wrap: wrap; gap: 10px;
+        }
+        header h1 { margin: 0; font-size: 16px; letter-spacing: 0.06em; color: var(--accent); }
+        header nav a { color: var(--muted); text-decoration: none; font-size: 13px; margin-right: 12px; }
+        header nav a:hover { color: var(--text); }
+        main { padding: 16px; max-width: 960px; margin: 0 auto; }
+        .hero {
+            background: linear-gradient(180deg,#0e1a14,#0a0f0c);
+            border: 1px solid var(--accent);
+            border-radius: 8px; padding: 18px; margin-bottom: 16px;
+        }
+        .hero .date {
+            color: var(--muted); font-family: ui-monospace, Menlo, monospace;
+            font-size: 13px;
+        }
+        .hero h2 {
+            margin: 6px 0 0; color: var(--accent); font-size: 22px;
+            letter-spacing: 0.04em;
+        }
+        .hero .head {
+            margin-top: 6px; font-size: 14px; color: var(--text);
+        }
+        .picker {
+            margin-top: 10px; display: flex; gap: 8px; align-items: center;
+            font-size: 12px;
+        }
+        .picker input[type=date] {
+            background: var(--panel2); color: var(--text);
+            border: 1px solid var(--border); border-radius: 4px;
+            padding: 4px 8px; font-family: inherit;
+        }
+        .picker button {
+            background: var(--accent); color: #001b10; border: none;
+            padding: 4px 10px; border-radius: 4px; cursor: pointer;
+            font-size: 12px; font-weight: 600;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px; margin-bottom: 16px;
+        }
+        .stat {
+            background: var(--panel2); border: 1px solid var(--border);
+            border-radius: 6px; padding: 12px;
+        }
+        .stat .lbl {
+            color: var(--muted); font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.08em;
+        }
+        .stat .num {
+            font-size: 28px; font-weight: 700; color: var(--accent);
+            line-height: 1.1;
+        }
+        .stat .sub {
+            color: var(--muted); font-size: 12px; margin-top: 4px;
+        }
+        .stat.warn .num { color: var(--warn); }
+        .stat.fail .num { color: var(--danger); }
+        .section {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 8px; padding: 14px; margin-bottom: 14px;
+        }
+        .section h3 {
+            margin: 0 0 10px; font-size: 13px;
+            color: var(--muted); text-transform: uppercase;
+            letter-spacing: 0.08em; border-bottom: 1px solid var(--border);
+            padding-bottom: 6px;
+        }
+        .kv {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr));
+            gap: 6px; font-size: 13px;
+        }
+        .kv > div {
+            background: var(--panel2); border: 1px solid var(--border);
+            border-radius: 4px; padding: 6px 10px;
+            display: flex; justify-content: space-between;
+        }
+        .kv b { color: var(--accent); font-family: ui-monospace, Menlo, monospace; }
+        .movers ol { margin: 0; padding-left: 20px; }
+        .movers li { padding: 4px 0; font-size: 13px; }
+        .movers a { color: var(--link); text-decoration: none; }
+        .movers a:hover { text-decoration: underline; }
+        .feed {
+            font-family: ui-monospace, Menlo, monospace; font-size: 11px;
+            max-height: 420px; overflow-y: auto;
+        }
+        .feed .row {
+            padding: 4px 8px; border-bottom: 1px dashed var(--border);
+            display: flex; gap: 12px; align-items: baseline;
+        }
+        .feed .ts { color: var(--muted); white-space: nowrap; }
+        .feed .act { color: var(--accent); width: 110px; flex-shrink: 0; }
+        .feed .det { color: var(--text); overflow-wrap: anywhere; }
+        .empty { color: var(--muted); padding: 12px; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>MARKO · Daily Recap</h1>
+    <nav>
+        <a href="/">← Dashboard</a>
+        <a href="/recap">Today</a>
+        <a href="/mode/call">📞 Call Mode</a>
+    </nav>
+</header>
+<main>
+    <div class="hero">
+        <div class="date">{{ recap.date }} · {{ recap.event_count }} events</div>
+        <h2>{{ recap.headline }}</h2>
+        <div class="head">{{ recap.new_leads_today }} new leads · {{ recap.sends_sent }} sent · {{ recap.closes_won }} won{% if recap.mrr_won_today %} (${{ '{:,}'.format(recap.mrr_won_today) }}/mo){% endif %} · {{ recap.scrape_added }} scraped</div>
+        <form class="picker" method="get" action="/recap">
+            <label>View another day:</label>
+            <input type="date" name="date" value="{{ recap.date }}">
+            <button type="submit">Load</button>
+        </form>
+    </div>
+
+    <div class="grid">
+        <div class="stat">
+            <div class="lbl">Emails sent</div>
+            <div class="num">{{ recap.sends_sent }}</div>
+            {% if recap.sends_dry %}<div class="sub">{{ recap.sends_dry }} dry-runs</div>{% endif %}
+        </div>
+        <div class="stat {% if recap.sends_failed %}fail{% endif %}">
+            <div class="lbl">Send failures</div>
+            <div class="num">{{ recap.sends_failed }}</div>
+            {% if recap.sends_retry %}<div class="sub">{{ recap.sends_retry }} transient retries</div>{% endif %}
+        </div>
+        <div class="stat">
+            <div class="lbl">Closed WON</div>
+            <div class="num">{{ recap.closes_won }}</div>
+            {% if recap.mrr_won_today %}<div class="sub">${{ '{:,}'.format(recap.mrr_won_today) }}/mo added</div>{% endif %}
+        </div>
+        <div class="stat {% if recap.closes_lost %}warn{% endif %}">
+            <div class="lbl">Closed LOST</div>
+            <div class="num">{{ recap.closes_lost }}</div>
+        </div>
+        <div class="stat">
+            <div class="lbl">New leads</div>
+            <div class="num">{{ recap.new_leads_today }}</div>
+            {% if recap.scrape_added %}<div class="sub">{{ recap.scrape_added }} via scrape</div>{% endif %}
+        </div>
+        <div class="stat">
+            <div class="lbl">Pending staged</div>
+            <div class="num">{{ recap.pending_staged }}</div>
+            {% if recap.pending_discarded %}<div class="sub">{{ recap.pending_discarded }} discarded</div>{% endif %}
+        </div>
+    </div>
+
+    {% if recap.by_disposition %}
+    <div class="section">
+        <h3>Dispositions logged</h3>
+        <div class="kv">
+            {% for k, v in recap.by_disposition.items() %}
+            <div>{{ k }}<b>{{ v }}</b></div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if recap.sequence_events %}
+    <div class="section">
+        <h3>Sequence transitions</h3>
+        <div class="kv">
+            {% for k, v in recap.sequence_events.items() %}
+            <div>{{ k }}<b>{{ v }}</b></div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if recap.top_movers %}
+    <div class="section movers">
+        <h3>Most active leads</h3>
+        <ol>
+            {% for m in recap.top_movers %}
+            <li><a href="/lead/{{ m.id }}/timeline">{{ m.name }}</a> · {{ m.status or 'NEW' }} · {{ m.events }} event{% if m.events != 1 %}s{% endif %}</li>
+            {% endfor %}
+        </ol>
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <h3>Activity feed (raw)</h3>
+        {% if recap.events %}
+        <div class="feed">
+            {% for e in recap.events|reverse %}
+            <div class="row">
+                <span class="ts">{{ (e.timestamp or '')[11:19] }}</span>
+                <span class="act">{{ e.action or '?' }}</span>
+                <span class="det">
+                    {% if e.lead_id %}<a href="/lead/{{ e.lead_id }}/timeline" style="color:var(--link); text-decoration:none;">[{{ e.lead_id }}]</a>{% endif %}
+                    {% for k,v in e.items() if k not in ('timestamp','action','lead_id') %}
+                        {{ k }}={{ v }}
+                    {% endfor %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty">No events logged on {{ recap.date }}.</div>
+        {% endif %}
+    </div>
+</main>
+</body>
+</html>

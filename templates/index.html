@@ -414,6 +414,7 @@
         <nav>
             <a href="#money">Money Mode</a>
             <a href="/mode/call">Call Mode</a>
+            <a href="/recap">📊 Recap</a>
             <a href="#callfirst">Call First</a>
             <a href="#scrape">Find Leads</a>
             <a href="#campaigns">Campaigns</a>
@@ -874,6 +875,7 @@
                         {% if l.email %}
                         <button type="button" class="btn muted email-preview-btn" data-lead="{{ l.id }}" data-kind="intro" title="preview an intro email (no auto-send)">✉ Preview email</button>
                         {% endif %}
+                        <a href="/lead/{{ l.id }}/timeline" class="btn muted" style="font-size:11px;" title="Lead timeline">📜 Timeline</a>
                         <button type="button" class="btn muted next-btn" data-from="{{ l.id }}">Next →</button>
                         <form action="/lead/{{ l.id }}/called" method="post" class="inline">
                             <button type="submit" style="font-size:12px;">Mark CALLED</button>
