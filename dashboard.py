@@ -12,6 +12,7 @@ import marko_intel
 import marko_sequence
 
 import scraper
+import storage
 
 app = Flask(__name__)
 

@@ -842,6 +842,193 @@ def test_set_lead_disposition_safety():
               not ok_missing)
 
 
+def test_storage_local_roundtrip():
+    print("test_storage_local_roundtrip")
+    import storage
+    # Default backend = local
+    with mock.patch.dict(os.environ, {}, clear=False):
+        os.environ.pop("STORAGE_BACKEND", None)
+        check("backend defaults to local",
+              storage._backend() == "local",
+              f"got {storage._backend()!r}")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "demo.json")
+            storage.write_json(path, {"hello": "world", "n": 42})
+            data = storage.read_json(path)
+            check("local roundtrip preserves dict",
+                  data == {"hello": "world", "n": 42}, f"got {data}")
+        # Missing path raises FileNotFoundError (preserves old contract)
+        with tempfile.TemporaryDirectory() as tmp:
+            try:
+                storage.read_json(os.path.join(tmp, "nope.json"))
+                check("read_json raises FileNotFoundError on missing", False,
+                      "no exception raised")
+            except FileNotFoundError:
+                check("read_json raises FileNotFoundError on missing", True)
+
+
+def test_storage_kv_key_derivation():
+    print("test_storage_kv_key_derivation")
+    import storage
+    check("leads.json -> marko:leads",
+          storage._kv_key_from_path("leads.json") == "marko:leads")
+    check("/var/task/campaigns.json -> marko:campaigns",
+          storage._kv_key_from_path("/var/task/campaigns.json") == "marko:campaigns")
+    check("nested path stripped to basename",
+          storage._kv_key_from_path("a/b/c/marko_log.json") == "marko:marko_log")
+
+
+def test_storage_kv_missing_creds():
+    print("test_storage_kv_missing_creds")
+    import storage
+    with mock.patch.dict(os.environ,
+                         {"STORAGE_BACKEND": "kv"}, clear=False):
+        os.environ.pop("KV_REST_API_URL", None)
+        os.environ.pop("KV_REST_API_TOKEN", None)
+        try:
+            storage.read_json("leads.json")
+            check("kv without creds raises StorageNotConfigured", False,
+                  "no exception raised")
+        except storage.StorageNotConfigured:
+            check("kv without creds raises StorageNotConfigured", True)
+        # is_persistent reports False when creds missing
+        check("is_persistent False when kv selected without creds",
+              not storage.is_persistent())
+
+
+def test_storage_kv_roundtrip_mocked():
+    print("test_storage_kv_roundtrip_mocked")
+    import storage
+    captured = {"calls": []}
+    stored_payload = {}
+
+    class FakeResp:
+        def __init__(self, body):
+            self._body = body.encode("utf-8") if isinstance(body, str) else body
+        def read(self):
+            return self._body
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, data=None, timeout=10):
+        url = req.full_url
+        method = req.get_method()
+        captured["calls"].append((method, url, data))
+        # Check auth header
+        if req.get_header("Authorization") != "Bearer fake-token":
+            return FakeResp(b'{"error":"unauthorized"}')
+        if method == "POST" and "/set/" in url:
+            key = url.rsplit("/set/", 1)[1]
+            stored_payload[key] = data.decode("utf-8") if data else None
+            return FakeResp(b'{"result":"OK"}')
+        if method == "GET" and "/get/" in url:
+            key = url.rsplit("/get/", 1)[1]
+            val = stored_payload.get(key)
+            return FakeResp(
+                json.dumps({"result": val}).encode("utf-8")
+            )
+        return FakeResp(b'{"result":null}')
+
+    env = {
+        "STORAGE_BACKEND": "kv",
+        "KV_REST_API_URL": "https://fake.upstash.io",
+        "KV_REST_API_TOKEN": "fake-token",
+    }
+    with mock.patch.dict(os.environ, env, clear=False):
+        with mock.patch.object(storage.urllib.request, "urlopen",
+                               side_effect=fake_urlopen):
+            storage.write_json("leads.json", {"leads": [{"id": "L1"}]})
+            data = storage.read_json("leads.json")
+
+    check("kv roundtrip preserves payload",
+          data == {"leads": [{"id": "L1"}]}, f"got {data}")
+    posts = [c for c in captured["calls"] if c[0] == "POST"]
+    gets = [c for c in captured["calls"] if c[0] == "GET"]
+    check("kv write issued exactly one POST", len(posts) == 1,
+          f"got {len(posts)} posts")
+    check("kv write URL includes marko:leads key",
+          "/set/marko:leads" in posts[0][1], f"got {posts[0][1]!r}")
+    check("kv read URL includes marko:leads key",
+          "/get/marko:leads" in gets[0][1], f"got {gets[0][1]!r}")
+
+
+def test_storage_kv_missing_key_raises_filenotfound():
+    print("test_storage_kv_missing_key_raises_filenotfound")
+    import storage
+
+    class FakeResp:
+        def __init__(self, body):
+            self._body = body.encode("utf-8") if isinstance(body, str) else body
+        def read(self): return self._body
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, data=None, timeout=10):
+        # Upstash returns {"result": null} for missing keys (not 404).
+        return FakeResp(b'{"result":null}')
+
+    env = {
+        "STORAGE_BACKEND": "kv",
+        "KV_REST_API_URL": "https://fake.upstash.io",
+        "KV_REST_API_TOKEN": "fake-token",
+    }
+    with mock.patch.dict(os.environ, env, clear=False):
+        with mock.patch.object(storage.urllib.request, "urlopen",
+                               side_effect=fake_urlopen):
+            try:
+                storage.read_json("ghost.json")
+                check("kv null result raises FileNotFoundError", False)
+            except FileNotFoundError:
+                check("kv null result raises FileNotFoundError", True)
+
+
+def test_storage_is_persistent_matrix():
+    print("test_storage_is_persistent_matrix")
+    import storage
+    # local backend off Vercel -> persistent
+    with mock.patch.dict(os.environ, {}, clear=True):
+        check("local off vercel -> persistent", storage.is_persistent())
+    # local backend on Vercel -> NOT persistent
+    with mock.patch.dict(os.environ, {"VERCEL": "1"}, clear=True):
+        check("local on vercel -> NOT persistent", not storage.is_persistent())
+    # kv with creds -> persistent
+    with mock.patch.dict(os.environ, {
+        "STORAGE_BACKEND": "kv",
+        "KV_REST_API_URL": "https://x", "KV_REST_API_TOKEN": "y",
+    }, clear=True):
+        check("kv with creds -> persistent", storage.is_persistent())
+    # kv without creds -> NOT persistent
+    with mock.patch.dict(os.environ, {"STORAGE_BACKEND": "kv"}, clear=True):
+        check("kv without creds -> NOT persistent", not storage.is_persistent())
+
+
+def test_commands_load_save_routes_through_storage():
+    print("test_commands_load_save_routes_through_storage")
+    import storage
+    calls = {"read": 0, "write": 0}
+    real_read, real_write = storage.read_json, storage.write_json
+
+    def spy_read(path):
+        calls["read"] += 1
+        return real_read(path)
+
+    def spy_write(path, data):
+        calls["write"] += 1
+        return real_write(path, data)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        _seed(tmp)
+        with mock.patch.object(storage, "read_json", side_effect=spy_read):
+            with mock.patch.object(storage, "write_json", side_effect=spy_write):
+                commands.add_lead("Test Co", "t@t.com", "movers")
+        check("commands.add_lead triggered storage.read_json",
+              calls["read"] >= 1, f"reads={calls['read']}")
+        check("commands.add_lead triggered storage.write_json",
+              calls["write"] >= 1, f"writes={calls['write']}")
+
+
 def test_marko_brain_basics():
     print("test_marko_brain_basics")
     import marko_brain
@@ -1348,6 +1535,13 @@ def main():
     test_marko_intel_voicemail()
     test_marko_intel_why_they_buy()
     test_voicemail_and_why_routes()
+    test_storage_local_roundtrip()
+    test_storage_kv_key_derivation()
+    test_storage_kv_missing_creds()
+    test_storage_kv_roundtrip_mocked()
+    test_storage_kv_missing_key_raises_filenotfound()
+    test_storage_is_persistent_matrix()
+    test_commands_load_save_routes_through_storage()
     test_marko_brain_basics()
     test_brain_and_mockup_routes()
     test_dnc_excluded_from_call_queue()

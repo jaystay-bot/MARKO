@@ -254,6 +254,26 @@
       "event": "booked",
       "step": 2,
       "done": true
+    },
+    {
+      "timestamp": "2026-05-12T22:28:30.209395",
+      "action": "pending_send_staged",
+      "lead_id": "L003",
+      "kind": "followup",
+      "step": 4
+    },
+    {
+      "timestamp": "2026-05-12T22:28:30.269409",
+      "action": "send",
+      "lead_id": "L003",
+      "status": "dry-run",
+      "kind": "followup"
+    },
+    {
+      "timestamp": "2026-05-12T22:28:30.296414",
+      "action": "pending_send_discarded",
+      "lead_id": "L003",
+      "kind": "followup"
     }
   ]
 }

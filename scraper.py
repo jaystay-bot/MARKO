@@ -28,8 +28,8 @@ SKIP_TITLES = ['top 10', 'top 5', 'top 20', 'best ', 'directory', ' near ', 'r/'
 
 
 def load_leads():
-    with open(LEADS_FILE, "r") as f:
-        return json.load(f)
+    # N271: route through commands.load_json (which delegates to storage).
+    return commands.load_json(LEADS_FILE)
 
 
 def save_leads(data):
@@ -146,29 +146,30 @@ def get_contact_type(email, phone):
 
 
 def _active_campaign_id():
-    if not os.path.exists(CAMPAIGNS_FILE):
-        return None
+    # N271: route through storage abstraction. The os.path.exists guard
+    # is dropped because the kv backend doesn't have a filesystem; we
+    # rely on FileNotFoundError handling instead.
     try:
-        with open(CAMPAIGNS_FILE, "r") as f:
-            data = json.load(f)
+        data = commands.load_json(CAMPAIGNS_FILE)
         for c in data.get("campaigns", []):
             if c.get("status") == "ACTIVE":
                 return c["id"]
+    except FileNotFoundError:
+        return None
     except Exception:
         pass
     return None
 
 
 def _log(entry):
-    if not os.path.exists(LOG_FILE):
-        return
+    # N271: route through storage abstraction. Missing log file = silent
+    # noop (same as before; this is just activity-log best-effort).
     try:
-        with open(LOG_FILE, "r") as f:
-            data = json.load(f)
+        data = commands.load_json(LOG_FILE)
         data.setdefault("log", []).append({"timestamp": datetime.now().isoformat(), **entry})
-        # N083: atomic write via commands.save_json so a crash mid-write
-        # cannot leave the activity log truncated.
         commands.save_json(LOG_FILE, data)
+    except FileNotFoundError:
+        return
     except Exception:
         pass
 

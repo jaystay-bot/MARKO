@@ -21,6 +21,7 @@ import sys
 import time
 from datetime import datetime
 
+import commands
 import scraper
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -85,23 +86,21 @@ def _merge(lead, owner, pain_tags):
 
 
 def _log(entry):
-    if not os.path.exists(LOG_FILE):
-        return
+    # N271: route through storage abstraction.
     try:
-        with open(LOG_FILE, "r") as f:
-            data = json.load(f)
+        data = commands.load_json(LOG_FILE)
         data.setdefault("log", []).append(
             {"timestamp": datetime.now().isoformat(), **entry}
         )
-        with open(LOG_FILE, "w") as f:
-            json.dump(data, f, indent=2)
+        commands.save_json(LOG_FILE, data)
+    except FileNotFoundError:
+        return
     except Exception:
         pass
 
 
 def run(write=False):
-    with open(LEADS_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = commands.load_json(LEADS_FILE)
     leads = data.get("leads", [])
 
     todo = [l for l in leads if _needs_enrichment(l)]
@@ -161,8 +160,7 @@ def run(write=False):
 
     if write and enriched:
         data["leads"] = leads
-        with open(LEADS_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        commands.save_json(LEADS_FILE, data)
         print(f"\nWrote {LEADS_FILE}")
         _log({"action": "enrich_batch", "considered": len(todo),
               "enriched": enriched, "owner_hits": owner_hits,
