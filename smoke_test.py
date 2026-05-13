@@ -300,6 +300,80 @@ def test_template_merge_fields():
           out2 == "Hi there", f"got {out2!r}")
 
 
+def test_score_lead_signals():
+    print("test_score_lead_signals")
+    # Maxed-out lead -> HOT
+    full = {"name": "X", "email": "x@y.com", "phone": "555-1234",
+            "website": "https://x.com/", "owner": "Pat", "niche": "movers",
+            "city": "Richmond", "state": "VA", "campaign_id": "C001",
+            "contact_type": "both", "source": "scrape"}
+    s = commands.score_lead(full)
+    check("full-signal lead scores HOT >= 70",
+          s["score"] >= 70 and s["label"] == "HOT",
+          f"score={s['score']} label={s['label']}")
+    check("full-signal lead lists key signals",
+          set(["email","phone","both_contacts","website","owner","contact_page",
+               "local","niche"]).issubset(set(s["signals"])),
+          f"got {s['signals']}")
+
+    # Email-only -> WEAK
+    weak = {"name": "X", "email": "x@y.com"}
+    s2 = commands.score_lead(weak)
+    check("email-only lead is WEAK (score < 40)",
+          s2["score"] < 40 and s2["label"] == "WEAK", f"score={s2['score']}")
+
+    # Email + phone + website -> GOOD (mid range)
+    mid = {"name": "Mid", "email": "m@m.com", "phone": "555-9999",
+           "website": "https://m.com/"}
+    s3 = commands.score_lead(mid)
+    check("email+phone+website is GOOD range",
+          40 <= s3["score"] < 70 and s3["label"] == "GOOD",
+          f"score={s3['score']} label={s3['label']}")
+
+
+def test_call_queue():
+    print("test_call_queue")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [
+            {"id": "A", "name": "best", "email": "b@b.com", "phone": "555-1",
+             "website": "https://b.com", "owner": "Pat", "city": "Richmond",
+             "campaign_id": "C001", "contact_type": "both", "source": "scrape",
+             "niche": "movers", "status": "NEW"},
+            {"id": "B", "name": "no-phone", "email": "n@n.com", "status": "NEW"},
+            {"id": "C", "name": "failed", "phone": "555-2", "status": "FAILED"},
+            {"id": "D", "name": "called", "phone": "555-3", "status": "CALLED"},
+            {"id": "E", "name": "mid", "phone": "555-4", "niche": "x",
+             "status": "NEW"},
+        ]}
+        _seed(tmp, leads=leads)
+        q = commands.call_queue(limit=10)
+        ids = [l["id"] for l in q]
+        check("call_queue excludes leads without phone", "B" not in ids)
+        check("call_queue excludes FAILED leads", "C" not in ids)
+        check("call_queue excludes CALLED leads", "D" not in ids)
+        check("call_queue includes phone+status=NEW leads",
+              "A" in ids and "E" in ids)
+        check("call_queue sorts by score desc (A before E)",
+              ids.index("A") < ids.index("E"), f"ids={ids}")
+
+
+def test_mark_called():
+    print("test_mark_called")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [{"id": "L001", "name": "X", "phone": "555-1",
+                            "status": "NEW"}]}
+        _seed(tmp, leads=leads)
+        ok = commands.mark_called("L001")
+        check("mark_called returns True for existing lead", ok)
+        after = json.load(open(commands.LEADS_FILE))["leads"]
+        check("mark_called sets status=CALLED",
+              after[0]["status"] == "CALLED", f"got {after[0]['status']}")
+        check("mark_called sets last_attempt_at",
+              after[0].get("last_attempt_at") is not None)
+        ok2 = commands.mark_called("L999")
+        check("mark_called returns False for missing lead", not ok2)
+
+
 def main():
     test_subpage_extraction()
     test_dedup()
@@ -310,6 +384,9 @@ def main():
     test_retry_count_escalation()
     test_retry_pending_cooldown_and_cap()
     test_template_merge_fields()
+    test_score_lead_signals()
+    test_call_queue()
+    test_mark_called()
     fails = [(n, d) for n, ok, d in results if not ok]
     print(f"\n{len(results) - len(fails)}/{len(results)} passed")
     if fails:

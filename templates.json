@@ -66,11 +66,14 @@
     "towing"
   ],
   "location_presets": [
-    {"city": "Colonial Heights", "state": "VA"},
-    {"city": "Petersburg", "state": "VA"},
-    {"city": "Chesterfield", "state": "VA"},
-    {"city": "Richmond", "state": "VA"},
-    {"city": "Virginia", "state": "VA"},
-    {"city": "USA", "state": "US"}
-  ]
+    {"city": "Colonial Heights", "state": "VA", "tier": 1},
+    {"city": "Petersburg", "state": "VA", "tier": 2},
+    {"city": "Chesterfield", "state": "VA", "tier": 3},
+    {"city": "Richmond", "state": "VA", "tier": 4},
+    {"city": "Henrico", "state": "VA", "tier": 5},
+    {"city": "Hopewell", "state": "VA", "tier": 6},
+    {"city": "Virginia", "state": "VA", "tier": 7},
+    {"city": "USA", "state": "US", "tier": 8}
+  ],
+  "_note_location_order": "Area expansion order, narrow -> wide. Not GPS distance."
 }

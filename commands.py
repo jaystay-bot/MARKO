@@ -20,7 +20,13 @@ BATCH_HARD_CAP = 10
 TRANSIENT_SMTP_CODES = {421, 450, 451, 452}
 MAX_RETRIES = 3
 RETRY_COOLDOWN_MINUTES = 60
-LEAD_STATUSES = ["NEW", "CONTACTED", "RETRY", "FAILED", "REPLIED", "ARCHIVED"]
+LEAD_STATUSES = ["NEW", "CONTACTED", "RETRY", "FAILED", "REPLIED", "ARCHIVED", "CALLED"]
+
+# Quality scoring (N031)
+SCORE_HOT_THRESHOLD = 70
+SCORE_GOOD_THRESHOLD = 40
+# Statuses that should NOT appear in the call queue
+CALL_QUEUE_EXCLUDE = {"FAILED", "ARCHIVED", "CALLED"}
 
 
 def load_json(filepath):
@@ -537,6 +543,105 @@ def is_duplicate_lead(leads, name=None, email=None, phone=None, website=None, ci
         if nm and ct \
                 and (l.get("name") or "").strip().lower() == nm \
                 and (l.get("city") or "").strip().lower() == ct:
+            return True
+    return False
+
+
+def score_lead(lead):
+    """Score a lead 0-100 with a label (HOT/GOOD/WEAK) and a signal trace.
+
+    Signals are deterministic, derived from existing lead fields. No external
+    API calls, no enrichment. The trace lets the UI explain WHY a lead is hot
+    so Jay can verify rather than trust a black box.
+    """
+    signals = []
+    score = 0
+
+    if lead.get("email"):
+        score += 20
+        signals.append("email")
+    if lead.get("phone"):
+        score += 20
+        signals.append("phone")
+    # Synergy: having BOTH is more useful than the sum of parts
+    if lead.get("email") and lead.get("phone"):
+        score += 10
+        signals.append("both_contacts")
+    if lead.get("website"):
+        score += 15
+        signals.append("website")
+    if lead.get("owner"):
+        score += 15
+        signals.append("owner")
+    # Subpage extraction inferred when contact_type == 'both' and source == 'scrape'
+    if lead.get("contact_type") == "both" and lead.get("source") == "scrape":
+        score += 10
+        signals.append("contact_page")
+    # Local relevance: campaign linked and city present
+    if lead.get("campaign_id") and lead.get("city"):
+        score += 5
+        signals.append("local")
+    # Niche match: lead has explicit niche
+    if lead.get("niche"):
+        score += 5
+        signals.append("niche")
+
+    if score >= SCORE_HOT_THRESHOLD:
+        label = "HOT"
+    elif score >= SCORE_GOOD_THRESHOLD:
+        label = "GOOD"
+    else:
+        label = "WEAK"
+    return {"score": min(score, 100), "label": label, "signals": signals}
+
+
+def annotate_leads(leads):
+    """Return a list of (lead, score_dict) tuples, score added in-place too."""
+    out = []
+    for l in leads:
+        s = score_lead(l)
+        l["_score"] = s["score"]
+        l["_label"] = s["label"]
+        l["_signals"] = s["signals"]
+        out.append((l, s))
+    return out
+
+
+def call_queue(limit=20):
+    """Top N leads to call first.
+
+    Filter: has phone, status not in CALL_QUEUE_EXCLUDE.
+    Sort: score desc, then has-email (true first), then created_at desc.
+    Returns the leads list (with _score/_label injected).
+    """
+    leads = load_json(LEADS_FILE).get("leads", [])
+    annotated = []
+    for l in leads:
+        if not l.get("phone"):
+            continue
+        if (l.get("status") or "NEW") in CALL_QUEUE_EXCLUDE:
+            continue
+        s = score_lead(l)
+        l["_score"] = s["score"]
+        l["_label"] = s["label"]
+        l["_signals"] = s["signals"]
+        annotated.append(l)
+    annotated.sort(
+        key=lambda l: (l["_score"], 1 if l.get("email") else 0, l.get("created_at") or ""),
+        reverse=True,
+    )
+    return annotated[:limit]
+
+
+def mark_called(lead_id):
+    """Mark a lead as CALLED. Returns True if found."""
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") == lead_id:
+            l["status"] = "CALLED"
+            l["last_attempt_at"] = datetime.now().isoformat()
+            save_json(LEADS_FILE, data)
+            log_action({"action": "lead_status", "lead_id": lead_id, "status": "CALLED"})
             return True
     return False
 

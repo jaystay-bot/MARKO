@@ -118,6 +118,8 @@
         .status-CONTACTED { color: var(--accent); }
         .status-RETRY { color: var(--warn); }
         .status-FAILED { color: var(--danger); }
+        .status-CALLED { color: #4cc2ff; }
+        .status-REPLIED { color: #c084fc; }
         .msg {
             background: var(--accent-dim);
             color: #fff;
@@ -146,6 +148,17 @@
         .campaign-card .card-stats .lbl { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; }
         .campaign-card .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .copy-btn { font-size: 11px; padding: 2px 6px; }
+        .score-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .score-HOT { background: #c2410c; color: #fff; }
+        .score-GOOD { background: #0e7c5a; color: #fff; }
+        .score-WEAK { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+        .call-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 6px; }
+        .call-card .row1 { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .call-card .biz { font-weight: 600; }
+        .call-card .meta { color: var(--muted); font-size: 12px; }
+        .call-card .phone { font-family: ui-monospace, Menlo, monospace; }
+        .tier-chip { font-size: 11px; padding: 3px 8px; }
+        .tier-chip .t-num { background: var(--accent); color: #001b10; padding: 1px 5px; border-radius: 8px; margin-right: 4px; font-weight: 600; }
         .preview-out { background: var(--panel2); padding: 10px; border-radius: 4px; margin-top: 6px; border-left: 3px solid var(--accent); font-size: 12px; white-space: pre-wrap; display: none; }
         .preview-out.show { display: block; }
         @media (max-width: 640px) {
@@ -162,6 +175,7 @@
         <h1>MARKO</h1>
         <nav>
             <a href="#home">Home</a>
+            <a href="#callfirst">Call First</a>
             <a href="#cheatsheet">Cheat Sheet</a>
             <a href="#scrape">Scrape</a>
             <a href="#campaigns">Campaigns</a>
@@ -209,6 +223,64 @@
                 </div>
             </details>
             {% endif %}
+        </section>
+
+        <section class="section" id="callfirst">
+            <h2>Call First <span class="pill" style="font-weight:normal; color:var(--muted);">{{ call_first|length }} ready</span></h2>
+            {% if call_first %}
+            <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">Sorted by quality score (signals: email, phone, website, owner, contact page, locality). Phone required. Already-CALLED leads excluded.</p>
+            {% for l in call_first %}
+            <div class="call-card">
+                <div class="row1">
+                    <div>
+                        <span class="score-badge score-{{ l._label }}">{{ l._label }} {{ l._score }}</span>
+                        <span class="biz">{{ l.name }}</span>
+                        {% if l.owner %}<span class="meta">— {{ l.owner }}</span>{% endif %}
+                    </div>
+                    <div>
+                        <span class="phone">{{ l.phone }}</span>
+                        <button type="button" class="btn muted copy-btn" data-copy="{{ l.phone }}" title="Copy phone">⧉</button>
+                        {% if l.email %}
+                        <span style="color:var(--muted); margin-left:8px;">{{ l.email }}</span>
+                        <button type="button" class="btn muted copy-btn" data-copy="{{ l.email }}" title="Copy email">⧉</button>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="row1" style="margin-top:6px;">
+                    <div class="meta">
+                        {% if l.city %}{{ l.city }}{% if l.state %}, {{ l.state }}{% endif %} · {% endif %}
+                        {{ l.niche or '—' }} ·
+                        signals: {{ l._signals|join(', ') }}
+                    </div>
+                    <div>
+                        {% if l.website %}<a href="{{ l.website }}" target="_blank" rel="noopener" style="color:var(--link); font-size:12px;">open ↗</a>{% endif %}
+                        <form action="/lead/{{ l.id }}/called" method="post" class="inline">
+                            <button type="submit" style="font-size:12px;">Mark CALLED</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color:var(--muted);">No leads with phone in callable status yet. Scrape some leads (Tier 1 area chip + niche chip + Run Scrape) and they'll appear here ranked by quality.</p>
+            {% endif %}
+            <details style="margin-top:12px;">
+                <summary><strong>Cold-call cheat sheet</strong> (copy-paste ready)</summary>
+                <div style="background:var(--panel2); padding:12px; border-radius:6px; margin-top:8px; font-size:13px; line-height:1.5;">
+                    <div><strong style="color:var(--accent);">Opener (15s)</strong></div>
+                    <pre style="margin:6px 0; white-space:pre-wrap; font-family:inherit;">"Hey, is this {{ '{{owner}}' }}? Quick one — I work with local {{ '{{niche}}' }} in {{ '{{city}}' }} and noticed {{ '{{business_name}}' }}. Got 30 seconds?"</pre>
+                    <div style="margin-top:10px;"><strong style="color:var(--accent);">If yes</strong></div>
+                    <pre style="margin:6px 0; white-space:pre-wrap; font-family:inherit;">"I'm not selling ads. I help shops like yours capture booking calls when you can't pick up. Worth a 2-min preview I can email you?"</pre>
+                    <div style="margin-top:10px;"><strong style="color:var(--accent);">If no / busy</strong></div>
+                    <pre style="margin:6px 0; white-space:pre-wrap; font-family:inherit;">"Totally — I'll send a quick preview to {{ '{{email}}' }} so you can look when you have a sec. Thanks!"</pre>
+                    <div style="margin-top:10px;"><strong style="color:var(--accent);">After the call</strong></div>
+                    <ul style="margin:6px 0 0 18px; padding:0;">
+                        <li>Click <em>Mark CALLED</em> on the lead</li>
+                        <li>If they want the email, click <em>Mark SENT</em> after sending</li>
+                        <li>If they hung up cold, leave as NEW and try again in 48h</li>
+                    </ul>
+                </div>
+            </details>
         </section>
 
         <section class="section" id="cheatsheet">
@@ -272,13 +344,13 @@
                     {% endfor %}
                 </div>
                 <div class="row" style="font-size:11px; margin-top:4px;">
-                    <span style="color:var(--muted); margin-right:6px;">location:</span>
+                    <span style="color:var(--muted); margin-right:6px;" title="Area expansion order, narrow to wide. Not GPS distance.">area expansion order:</span>
                     {% for loc in templates.location_presets %}
-                    <button type="button" class="btn muted preset-loc" data-city="{{ loc.city }}" data-state="{{ loc.state }}" style="font-size:11px; padding:3px 8px;">{{ loc.city }}, {{ loc.state }}</button>
+                    <button type="button" class="btn muted preset-loc tier-chip" data-city="{{ loc.city }}" data-state="{{ loc.state }}"><span class="t-num">{{ loc.tier }}</span>{{ loc.city }}</button>
                     {% endfor %}
                 </div>
             </form>
-            <p style="color:var(--muted); font-size:12px; margin:10px 0 0;">Tip: location expansion goes <em>narrow → wide</em> (Colonial Heights → Petersburg → Chesterfield → Richmond → Virginia → USA). Scraper does not fake geographic precision; broaden when narrow yields few results.</p>
+            <p style="color:var(--muted); font-size:12px; margin:10px 0 0;">Tip: start at Tier 1, broaden one tier at a time when results dry up. These are an <em>operator-defined expansion order</em>, not GPS distances — MARKO never fakes geographic precision.</p>
         </section>
 
         <section class="section" id="campaigns">
@@ -389,7 +461,14 @@
                     <option value="CONTACTED">CONTACTED</option>
                     <option value="RETRY">RETRY</option>
                     <option value="FAILED">FAILED</option>
+                    <option value="CALLED">CALLED</option>
                     <option value="ARCHIVED">ARCHIVED</option>
+                </select>
+                <select id="filter-score">
+                    <option value="">any quality</option>
+                    <option value="HOT">HOT only</option>
+                    <option value="GOOD">GOOD+</option>
+                    <option value="WEAK">WEAK only</option>
                 </select>
                 <select id="filter-niche">
                     <option value="">all niches</option>
@@ -406,14 +485,16 @@
             <div class="scroll-x">
             <table id="leads-table">
                 <tr>
-                    <th>ID</th><th>Business</th><th>Owner</th><th>Email</th><th>Phone</th>
+                    <th>ID</th><th>Quality</th><th>Business</th><th>Owner</th><th>Email</th><th>Phone</th>
                     <th>Website</th><th>City</th><th>Niche</th><th>Status</th><th>Retries</th>
                     <th>Campaign</th><th>Source</th><th>Actions</th>
                 </tr>
                 {% for l in leads %}
                 <tr data-status="{{ l.status }}" data-niche="{{ l.niche or '' }}" data-contact="{{ l.contact_type or '' }}"
+                    data-score="{{ l._label or 'WEAK' }}"
                     data-search="{{ (l.name or '')|lower }} {{ (l.email or '')|lower }} {{ (l.city or '')|lower }} {{ (l.owner or '')|lower }}">
                     <td>{{ l.id }}</td>
+                    <td><span class="score-badge score-{{ l._label or 'WEAK' }}" title="{{ (l._signals or [])|join(', ') }}">{{ l._label or 'WEAK' }} {{ l._score or 0 }}</span></td>
                     <td>{{ l.name }}</td>
                     <td>{{ l.owner or '' }}</td>
                     <td>
@@ -439,6 +520,11 @@
                         {% if l.status == "RETRY" %}
                         <form action="/lead/{{ l.id }}/reset" method="post" class="inline">
                             <button type="submit" class="muted" title="reset to NEW">↻ Retry</button>
+                        </form>
+                        {% endif %}
+                        {% if l.phone and l.status not in ("CALLED","ARCHIVED") %}
+                        <form action="/lead/{{ l.id }}/called" method="post" class="inline">
+                            <button type="submit" class="muted">Mark CALLED</button>
                         </form>
                         {% endif %}
                         {% if l.status != "CONTACTED" and l.status != "ARCHIVED" %}
@@ -528,14 +614,17 @@
             const status = document.getElementById('filter-status');
             const niche = document.getElementById('filter-niche');
             const contact = document.getElementById('filter-contact');
+            const score = document.getElementById('filter-score');
             const rows = document.querySelectorAll('#leads-table tr[data-status]');
             const count = document.getElementById('lead-count');
 
+            const scoreRank = {HOT: 3, GOOD: 2, WEAK: 1};
             function apply() {
                 const q = search.value.toLowerCase().trim();
                 const s = status.value;
                 const n = niche.value;
                 const c = contact.value;
+                const sc = score.value;
                 let shown = 0;
                 rows.forEach(r => {
                     let visible = true;
@@ -543,12 +632,17 @@
                     if (n && r.dataset.niche !== n) visible = false;
                     if (c && r.dataset.contact !== c) visible = false;
                     if (q && !r.dataset.search.includes(q)) visible = false;
+                    if (sc) {
+                        if (sc === 'HOT' && r.dataset.score !== 'HOT') visible = false;
+                        else if (sc === 'GOOD' && scoreRank[r.dataset.score] < 2) visible = false;
+                        else if (sc === 'WEAK' && r.dataset.score !== 'WEAK') visible = false;
+                    }
                     r.style.display = visible ? '' : 'none';
                     if (visible) shown++;
                 });
                 count.textContent = shown + ' shown';
             }
-            [search, status, niche, contact].forEach(el => {
+            [search, status, niche, contact, score].forEach(el => {
                 el.addEventListener('input', apply);
                 el.addEventListener('change', apply);
             });

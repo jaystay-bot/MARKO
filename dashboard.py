@@ -39,6 +39,10 @@ def index():
         and int(l.get("retry_count", 0)) < commands.MAX_RETRIES
     )
 
+    # Score every lead in-place so the leads table can show HOT/GOOD/WEAK
+    commands.annotate_leads(leads)
+    call_first = commands.call_queue(limit=10)
+
     is_vercel = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
 
     message = request.args.get("message", "")
@@ -53,6 +57,7 @@ def index():
         niches=niches,
         cities=cities,
         retry_eligible=retry_eligible,
+        call_first=call_first,
         max_retries=commands.MAX_RETRIES,
         daily_cap=commands.DAILY_SEND_CAP,
         cooldown_minutes=commands.RETRY_COOLDOWN_MINUTES,
@@ -134,6 +139,13 @@ def lead_archive(lead_id):
 def lead_reset(lead_id):
     ok = commands.set_lead_status(lead_id, "NEW")
     msg = f"Lead {lead_id} reset to NEW" if ok else f"Lead {lead_id} not found"
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/lead/<lead_id>/called", methods=["POST"])
+def lead_called(lead_id):
+    ok = commands.mark_called(lead_id)
+    msg = f"Lead {lead_id} marked CALLED" if ok else f"Lead {lead_id} not found"
     return redirect(url_for("index", message=msg))
 
 

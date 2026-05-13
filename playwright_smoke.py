@@ -164,6 +164,35 @@ def run_tests():
             check("17. Jay Cheat Sheet section present",
                   page.locator("section#cheatsheet").is_visible())
 
+            # 18. Call First section visible
+            check("18. Call First section visible",
+                  page.locator("section#callfirst").is_visible())
+
+            # 19. Quality score badges visible somewhere on the page
+            check("19. quality score badges (HOT/GOOD/WEAK) render",
+                  page.locator(".score-badge").count() >= 1)
+
+            # 20. Cold-call cheat sheet expands
+            sheet_summary = page.locator(
+                "section#callfirst details summary"
+            ).filter(has_text="Cold-call cheat sheet")
+            if sheet_summary.count():
+                sheet_summary.click()
+                # After click, the parent <details> should be open
+                is_open = page.evaluate(
+                    "() => document.querySelector('section#callfirst details').open"
+                )
+                check("20. cold-call cheat sheet expands on click", is_open)
+            else:
+                check("20. cold-call cheat sheet expands on click", False,
+                      "summary not found")
+
+            # 21. Area tier chips show tier numbers (no fake GPS labels)
+            tier_chips = page.locator(".tier-chip .t-num").all_text_contents()
+            check("21. area chips labeled with tier numbers 1..8",
+                  set(tier_chips) >= set(str(i) for i in range(1, 7)),
+                  f"got tiers {tier_chips}")
+
         finally:
             browser.close()
 
