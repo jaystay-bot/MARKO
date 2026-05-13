@@ -185,6 +185,81 @@ def generate_script(lead, sender_name="Jay"):
     return line1 + line2
 
 
+# ---------- N084: Email Generator ----------
+#
+# Three template-driven variants for one lead. No AI. Same pain-tag hooks
+# as the call script for tonal consistency. Output is always preview-only;
+# callers must decide whether to send.
+
+EMAIL_KINDS = ("intro", "followup", "breakup")
+
+
+def generate_email(lead, kind="intro", sender_name="Jay"):
+    """Return {kind, subject, body} for one lead. Never auto-sends.
+
+    Falls back to safe generic copy when fields are missing.
+    """
+    if kind not in EMAIL_KINDS:
+        kind = "intro"
+
+    owner_first = _first_name(lead.get("owner")) or "there"
+    business = (lead.get("name") or "your business").strip()
+    city = lead.get("city") or "your area"
+    niche = (lead.get("niche") or "local business").strip()
+    pain = lead.get("pain_points") or []
+    if isinstance(pain, str):
+        pain = [pain]
+    primary_hook = None
+    for tag in pain:
+        if tag in WEAKNESS_HOOK:
+            primary_hook = WEAKNESS_HOOK[tag]
+            break
+
+    if kind == "intro":
+        subject = f"Quick question about {business}"
+        if primary_hook:
+            body = (
+                f"Hey {owner_first},\n\n"
+                f"Saw {business} when I was looking around at {niche} in {city}. "
+                f"Noticed {primary_hook} — usually means a few leads slip through "
+                f"the cracks every month.\n\n"
+                f"I build something specifically for shops in this spot. Worth a "
+                f"30-second preview?\n\n"
+                f"– {sender_name}"
+            )
+        else:
+            body = (
+                f"Hey {owner_first},\n\n"
+                f"Saw {business} when I was looking around at {niche} in {city}. "
+                f"I work with a handful of local shops in this niche and have a "
+                f"quick idea I think could help.\n\n"
+                f"Open to a 30-second preview?\n\n"
+                f"– {sender_name}"
+            )
+    elif kind == "followup":
+        subject = f"Re: {business}"
+        body = (
+            f"Hey {owner_first},\n\n"
+            f"Following up on my note from earlier — figured the inbox is "
+            f"probably busy.\n\n"
+            f"Short version: I help {niche} shops in {city} stop losing "
+            f"after-hours leads. Worth a look this week?\n\n"
+            f"– {sender_name}"
+        )
+    else:  # breakup
+        subject = f"Closing the loop on {business}"
+        body = (
+            f"Hey {owner_first},\n\n"
+            f"Reaching out one last time before I close the file on {business}. "
+            f"If now isn't the right time, totally fine — just hit reply with a "
+            f"\"not now\" and I'll stop bugging you.\n\n"
+            f"Otherwise, the preview I mentioned is still here when you want it.\n\n"
+            f"– {sender_name}"
+        )
+
+    return {"kind": kind, "subject": subject, "body": body}
+
+
 # ---------- N098: Daily Brief ----------
 #
 # Wraps the already-scored call queue with per-lead script + money estimate.

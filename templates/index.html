@@ -153,6 +153,17 @@
         .score-GOOD { background: #0e7c5a; color: #fff; }
         .score-WEAK { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
         .call-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 6px; }
+        .call-card.priority { border-left: 3px solid var(--accent); }
+        .focus-banner { background: linear-gradient(90deg, #c2410c 0%, #8a2c08 100%); color: #fff; padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; }
+        .focus-title { font-weight: 700; letter-spacing: 0.05em; font-size: 14px; }
+        .focus-meta { font-size: 12px; opacity: 0.9; }
+        .focus-divider { text-align: center; margin: 10px 0; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; position: relative; }
+        .focus-divider::before, .focus-divider::after { content: ''; position: absolute; top: 50%; width: 30%; border-top: 1px dashed var(--border); }
+        .focus-divider::before { left: 0; }
+        .focus-divider::after { right: 0; }
+        .email-preview-out { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; margin-top: 6px; padding: 8px 10px; font-size: 12px; display: none; }
+        .email-preview-out.show { display: block; }
+        .email-preview-out pre { background: var(--panel2); padding: 8px; border-radius: 4px; white-space: pre-wrap; font-family: inherit; margin: 6px 0 0; }
         .call-card .row1 { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
         .call-card .biz { font-weight: 600; }
         .call-card .meta { color: var(--muted); font-size: 12px; }
@@ -165,6 +176,13 @@
         .welcome a, .welcome .btn { color: #001b10; }
         .pain-tag { display: inline-block; background: #44290b; color: #ffb627; border: 1px solid #ffb62744; padding: 1px 7px; border-radius: 10px; font-size: 11px; margin: 1px 2px; }
         .touch-badge { display: inline-block; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); padding: 1px 7px; border-radius: 10px; font-size: 10px; }
+        .money-chip { display: inline-block; background: #0a3a26; color: #4ade80; border: 1px solid #4ade8044; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        .money-chip .conf { opacity: 0.65; font-weight: 400; margin-left: 4px; }
+        .script-block { margin-top: 8px; padding: 8px 10px; background: var(--panel2); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 13px; line-height: 1.4; }
+        .script-block .script-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+        .script-block .script-text { font-family: inherit; white-space: pre-wrap; margin: 0; }
+        .script-block .script-actions { margin-top: 6px; display: flex; gap: 6px; align-items: center; }
+        .script-block .script-actions .btn { font-size: 11px; padding: 2px 8px; }
         .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
         .preset-row .btn { font-size: 12px; padding: 6px 10px; }
         .next-btn { font-size: 11px; padding: 2px 8px; }
@@ -260,10 +278,17 @@
         <section class="section" id="callfirst">
             <h2>Call First <span class="pill" style="font-weight:normal; color:var(--muted);">{{ call_first|length }} ready</span></h2>
             {% if call_first %}
+            <div class="focus-banner">
+                <span class="focus-title">🎯 CALL THESE {{ [call_first|length, 5]|min }} FIRST</span>
+                <span class="focus-meta">Top of queue by quality score. Work top-to-bottom; the divider marks where the priority list ends.</span>
+            </div>
             <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">Sorted by quality score (signals: email, phone, website, owner, contact page, locality). Phone required. Already-CALLED leads excluded.</p>
             {% for l in call_first %}
+            {% if loop.index == 6 %}
+            <div class="focus-divider" title="end of priority 5"><span>— rest of queue —</span></div>
+            {% endif %}
             {% set touches = touch_counts.get(l.id, 0) %}
-            <div class="call-card" data-lead-id="{{ l.id }}">
+            <div class="call-card{% if loop.index <= 5 %} priority{% endif %}" data-lead-id="{{ l.id }}">
                 <div class="row1">
                     <div>
                         <span class="score-badge score-{{ l._label }}">{{ l._label }} {{ l._score }}</span>
@@ -280,10 +305,23 @@
                         {% endif %}
                     </div>
                 </div>
-                {% if l.pain_points %}
+                {% if l.pain_points or (l._missed_money and l._missed_money.low) %}
                 <div style="margin-top:6px;">
-                    <span style="color:var(--muted); font-size:11px; margin-right:4px;">call ammo:</span>
-                    {% for tag in l.pain_points %}<span class="pain-tag">{{ tag }}</span>{% endfor %}
+                    {% if l.pain_points %}<span style="color:var(--muted); font-size:11px; margin-right:4px;">call ammo:</span>
+                    {% for tag in l.pain_points %}<span class="pain-tag">{{ tag }}</span>{% endfor %}{% endif %}
+                    {% if l._missed_money and l._missed_money.low %}
+                    <span class="money-chip" title="Estimated monthly revenue leak from observed weaknesses · {{ l._missed_money.note }}">~${{ '{:,}'.format(l._missed_money.low) }}-${{ '{:,}'.format(l._missed_money.high) }}/mo lost<span class="conf">{{ l._missed_money.confidence }} conf</span></span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if l._script %}
+                <div class="script-block">
+                    <div class="script-label">Opener (tap to copy)</div>
+                    <p class="script-text">{{ l._script }}</p>
+                    <div class="script-actions">
+                        <button type="button" class="btn muted copy-btn" data-copy="{{ l._script }}">⧉ Copy script</button>
+                        <a class="btn muted" href="tel:{{ l.phone }}">📞 Call</a>
+                    </div>
                 </div>
                 {% endif %}
                 <div class="row1" style="margin-top:6px;">
@@ -294,12 +332,16 @@
                     </div>
                     <div>
                         {% if l.website %}<a href="{{ l.website }}" target="_blank" rel="noopener" style="color:var(--link); font-size:12px;">open ↗</a>{% endif %}
+                        {% if l.email %}
+                        <button type="button" class="btn muted email-preview-btn" data-lead="{{ l.id }}" data-kind="intro" title="preview an intro email (no auto-send)">✉ Preview email</button>
+                        {% endif %}
                         <button type="button" class="btn muted next-btn" data-from="{{ l.id }}">Next →</button>
                         <form action="/lead/{{ l.id }}/called" method="post" class="inline">
                             <button type="submit" style="font-size:12px;">Mark CALLED</button>
                         </form>
                     </div>
                 </div>
+                <div class="email-preview-out" id="email-preview-{{ l.id }}"></div>
             </div>
             {% endfor %}
             {% else %}
@@ -763,6 +805,71 @@
                     ta.value = val; document.body.appendChild(ta); ta.select();
                     document.execCommand('copy'); document.body.removeChild(ta);
                     btn.textContent = '✓'; setTimeout(() => { btn.textContent = '⧉'; }, 800);
+                }
+            });
+        });
+
+        // N084: Per-lead email preview (intro/followup/breakup)
+        document.querySelectorAll('.email-preview-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const leadId = btn.dataset.lead;
+                const kind = btn.dataset.kind || 'intro';
+                const out = document.getElementById('email-preview-' + leadId);
+                if (!out) return;
+                out.classList.add('show');
+                out.textContent = 'loading...';
+                try {
+                    const r = await fetch('/lead/' + encodeURIComponent(leadId) + '/email/' + encodeURIComponent(kind));
+                    const j = await r.json();
+                    if (j.error) { out.textContent = 'Error: ' + j.error; return; }
+                    // Build the preview block: kind switcher + subject + body + copy + cycle.
+                    out.innerHTML = '';
+                    const head = document.createElement('div');
+                    head.style.display = 'flex';
+                    head.style.justifyContent = 'space-between';
+                    head.style.alignItems = 'center';
+                    head.innerHTML = '<strong>Subject:</strong> <span class="subj"></span>';
+                    out.appendChild(head);
+                    head.querySelector('.subj').textContent = j.subject || '';
+                    const pre = document.createElement('pre');
+                    pre.textContent = j.body || '';
+                    out.appendChild(pre);
+                    const actions = document.createElement('div');
+                    actions.style.marginTop = '6px';
+                    actions.style.display = 'flex';
+                    actions.style.gap = '6px';
+                    actions.style.flexWrap = 'wrap';
+                    ['intro','followup','breakup'].forEach(k => {
+                        const b = document.createElement('button');
+                        b.type = 'button';
+                        b.textContent = k;
+                        b.className = 'btn muted';
+                        b.style.fontSize = '11px';
+                        if (k === j.kind) b.style.background = 'var(--border)';
+                        b.addEventListener('click', () => {
+                            btn.dataset.kind = k;
+                            btn.click();
+                        });
+                        actions.appendChild(b);
+                    });
+                    const copyB = document.createElement('button');
+                    copyB.type = 'button';
+                    copyB.className = 'btn muted';
+                    copyB.textContent = '⧉ Copy email';
+                    copyB.style.fontSize = '11px';
+                    copyB.addEventListener('click', async () => {
+                        try {
+                            await navigator.clipboard.writeText(
+                                'Subject: ' + j.subject + '\n\n' + j.body
+                            );
+                            copyB.textContent = '✓ Copied';
+                            setTimeout(() => { copyB.textContent = '⧉ Copy email'; }, 800);
+                        } catch (e) {}
+                    });
+                    actions.appendChild(copyB);
+                    out.appendChild(actions);
+                } catch (e) {
+                    out.textContent = 'Preview failed: ' + e.message;
                 }
             });
         });

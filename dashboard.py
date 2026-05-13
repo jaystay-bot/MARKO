@@ -4,6 +4,7 @@ from flask import Flask, render_template, request, redirect, url_for, Response, 
 import json
 import os
 import commands
+import marko_intel
 import scraper
 
 app = Flask(__name__)
@@ -42,6 +43,16 @@ def index():
     # Score every lead in-place so the leads table can show HOT/GOOD/WEAK
     commands.annotate_leads(leads)
     call_first = commands.call_queue(limit=10)
+
+    # N084 + N089: attach a personalized cold-call script and a missed-money
+    # estimate to each Call First card. Pure functions over existing fields.
+    try:
+        sender_name = commands.get_config().get("sender_name", "Jay")
+    except Exception:
+        sender_name = "Jay"
+    for _l in call_first:
+        _l["_script"] = marko_intel.generate_script(_l, sender_name=sender_name)
+        _l["_missed_money"] = marko_intel.estimate_missed_money(_l)
 
     # N050: touch count per lead (any send/called/retry_status event in log)
     touch_counts = {}
@@ -164,6 +175,70 @@ def lead_called(lead_id):
     ok = commands.mark_called(lead_id)
     msg = f"Lead {lead_id} marked CALLED" if ok else f"Lead {lead_id} not found"
     return redirect(url_for("index", message=msg))
+
+
+@app.route("/lead/<lead_id>/intel")
+def lead_intel(lead_id):
+    """N081: full intel JSON for a single lead.
+
+    Returns the lead's score + signals + pain points + missed-money estimate +
+    a 'soft' cold-call script. Pure read; no mutation. Used by the UI for an
+    intel panel and by headless tooling that wants the raw numbers.
+    """
+    leads = load_json(LEADS_FILE).get("leads", [])
+    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    if not lead:
+        return jsonify({"error": "lead not found", "id": lead_id}), 404
+
+    # Score it once so the intel response is consistent with the UI
+    s = commands.score_lead(lead)
+    lead["_score"] = s["score"]
+    lead["_label"] = s["label"]
+    lead["_signals"] = s["signals"]
+
+    sender = "Jay"
+    try:
+        sender = commands.get_config().get("sender_name", "Jay")
+    except Exception:
+        pass
+
+    return jsonify({
+        "id": lead.get("id"),
+        "name": lead.get("name"),
+        "owner": lead.get("owner"),
+        "phone": lead.get("phone"),
+        "email": lead.get("email"),
+        "city": lead.get("city"),
+        "state": lead.get("state"),
+        "niche": lead.get("niche"),
+        "status": lead.get("status"),
+        "score": s["score"],
+        "label": s["label"],
+        "signals": s["signals"],
+        "pain_points": lead.get("pain_points") or [],
+        "missed_money": marko_intel.estimate_missed_money(lead),
+        "script": marko_intel.generate_script(lead, sender_name=sender),
+    })
+
+
+@app.route("/lead/<lead_id>/email/<kind>")
+def lead_email(lead_id, kind):
+    """N084: preview-only email generation. Returns {kind, subject, body}.
+
+    kind ∈ {intro, followup, breakup}. Never sends — UI surfaces this for
+    operator copy/edit/paste workflows.
+    """
+    leads = load_json(LEADS_FILE).get("leads", [])
+    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    if not lead:
+        return jsonify({"error": "lead not found", "id": lead_id}), 404
+
+    sender = "Jay"
+    try:
+        sender = commands.get_config().get("sender_name", "Jay")
+    except Exception:
+        pass
+    return jsonify(marko_intel.generate_email(lead, kind=kind, sender_name=sender))
 
 
 @app.route("/campaign/preset/<preset_id>", methods=["POST"])

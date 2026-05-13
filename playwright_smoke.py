@@ -224,6 +224,25 @@ def run_tests():
             else:
                 check("25. Next button (no call cards in fixture, skipped)", True)
 
+            # 26. N090 focus banner "CALL THESE N FIRST"
+            if page.locator(".call-card").count() > 0:
+                check("26. CALL THESE N FIRST focus banner present",
+                      page.locator(".focus-banner").count() >= 1
+                      and "CALL THESE" in page.locator(".focus-banner").first.text_content())
+                check("26b. priority class applied to top-5 cards",
+                      page.locator(".call-card.priority").count() >= 1)
+            else:
+                check("26. focus banner (no call cards in fixture, skipped)", True)
+                check("26b. priority highlighting (no call cards, skipped)", True)
+
+            # 27. N084 email-preview button on cards with email
+            email_btns = page.locator(".email-preview-btn")
+            if page.locator(".call-card").count() > 0:
+                check("27. Preview email button exists on at least one card",
+                      email_btns.count() >= 1, f"count={email_btns.count()}")
+            else:
+                check("27. email preview button (no call cards, skipped)", True)
+
         finally:
             browser.close()
 

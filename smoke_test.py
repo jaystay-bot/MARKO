@@ -460,6 +460,117 @@ def test_campaign_preset_route():
               "TestPreset" in names, f"got {names}")
 
 
+def test_marko_intel_money_estimate():
+    print("test_marko_intel_money_estimate")
+    import marko_intel
+    # Known niche + signals -> non-zero estimate, med/high confidence
+    lead = {"niche": "movers", "pain_points":
+            ["no online booking", "weak mobile", "no contact form"]}
+    m = marko_intel.estimate_missed_money(lead)
+    check("known niche + 3 pain points -> non-zero estimate",
+          m["low"] is not None and m["low"] > 0 and m["high"] > m["low"],
+          f"got {m}")
+    check("3 pain points -> high confidence",
+          m["confidence"] == "high", f"got {m['confidence']}")
+
+    # Unknown niche -> None estimate, low confidence, helpful note
+    unknown = {"niche": "alpaca trainer", "pain_points": ["weak mobile"]}
+    u = marko_intel.estimate_missed_money(unknown)
+    check("unknown niche -> low/None estimate",
+          u["low"] is None and u["confidence"] == "low",
+          f"got {u}")
+
+    # No pain points -> 0/0 estimate, low confidence
+    clean = {"niche": "movers", "pain_points": []}
+    c = marko_intel.estimate_missed_money(clean)
+    check("no pain points -> zero estimate",
+          c["low"] == 0 and c["high"] == 0, f"got {c}")
+
+
+def test_marko_intel_script():
+    print("test_marko_intel_script")
+    import marko_intel
+    lead = {"name": "Acme Movers", "owner": "Sarah Johnson",
+            "city": "Richmond", "niche": "movers",
+            "pain_points": ["no online booking", "weak mobile"]}
+    s = marko_intel.generate_script(lead, sender_name="Jay")
+    check("script includes owner first name",
+          "Sarah" in s and "Johnson" not in s, f"got {s!r}")
+    check("script includes business name", "Acme Movers" in s)
+    check("script includes city", "Richmond" in s)
+    check("script hooks the first pain point",
+          "book" in s.lower() or "online" in s.lower(), f"got {s!r}")
+
+    # No owner -> doesn't address by name
+    s2 = marko_intel.generate_script({"name": "X", "niche": "movers"},
+                                     sender_name="Jay")
+    check("missing owner -> generic opener (no 'Hey None')",
+          "Hey, this is Jay" in s2 and "None" not in s2, f"got {s2!r}")
+
+
+def test_marko_intel_email():
+    print("test_marko_intel_email")
+    import marko_intel
+    lead = {"name": "Acme Movers", "owner": "Sarah Johnson",
+            "city": "Richmond", "niche": "movers",
+            "pain_points": ["no online booking"]}
+    for kind in ("intro", "followup", "breakup"):
+        e = marko_intel.generate_email(lead, kind=kind, sender_name="Jay")
+        check(f"email kind={kind} has subject + body",
+              e.get("subject") and e.get("body") and e.get("kind") == kind,
+              f"got {e}")
+    # Unknown kind falls back to intro
+    e_bad = marko_intel.generate_email(lead, kind="badkind")
+    check("unknown email kind falls back to intro",
+          e_bad["kind"] == "intro", f"got {e_bad['kind']!r}")
+    # No owner -> 'there' not 'None'
+    e_none = marko_intel.generate_email({"name": "X", "niche": "movers"},
+                                        kind="intro")
+    check("missing owner -> 'there' fallback (no 'None')",
+          "None" not in e_none["body"] and "there" in e_none["body"],
+          f"body={e_none['body'][:80]!r}")
+
+
+def test_intel_and_email_routes():
+    print("test_intel_and_email_routes")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [{"id": "L001", "name": "Acme", "owner": "Sarah Johnson",
+                            "phone": "555-1", "email": "a@a.com",
+                            "city": "Richmond", "niche": "movers",
+                            "pain_points": ["no online booking", "weak mobile"],
+                            "status": "NEW", "website": "https://acme.com"}]}
+        _seed(tmp, leads=leads)
+        import dashboard
+        dashboard.CAMPAIGNS_FILE = commands.CAMPAIGNS_FILE
+        dashboard.LEADS_FILE = commands.LEADS_FILE
+        dashboard.LOG_FILE = commands.LOG_FILE
+        client = dashboard.app.test_client()
+
+        r = client.get("/lead/L001/intel")
+        check("/lead/L001/intel returns 200", r.status_code == 200,
+              f"got {r.status_code}")
+        j = r.get_json()
+        check("/intel returns score + label", j.get("score") is not None
+              and j.get("label") in ("HOT", "GOOD", "WEAK"), f"got {j}")
+        check("/intel returns missed_money block",
+              isinstance(j.get("missed_money"), dict)
+              and "confidence" in j["missed_money"])
+        check("/intel returns generated script",
+              isinstance(j.get("script"), str) and len(j["script"]) > 10)
+
+        r404 = client.get("/lead/L999/intel")
+        check("/intel returns 404 for missing lead",
+              r404.status_code == 404, f"got {r404.status_code}")
+
+        for kind in ("intro", "followup", "breakup"):
+            re = client.get(f"/lead/L001/email/{kind}")
+            check(f"/email/{kind} route returns 200",
+                  re.status_code == 200)
+            je = re.get_json()
+            check(f"/email/{kind} returns subject+body",
+                  je.get("subject") and je.get("body"))
+
+
 def main():
     test_subpage_extraction()
     test_dedup()
@@ -476,6 +587,10 @@ def main():
     test_owner_extractor()
     test_pain_points()
     test_campaign_preset_route()
+    test_marko_intel_money_estimate()
+    test_marko_intel_script()
+    test_marko_intel_email()
+    test_intel_and_email_routes()
     fails = [(n, d) for n, ok, d in results if not ok]
     print(f"\n{len(results) - len(fails)}/{len(results)} passed")
     if fails:
