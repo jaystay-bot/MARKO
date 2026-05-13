@@ -547,6 +547,117 @@ def is_duplicate_lead(leads, name=None, email=None, phone=None, website=None, ci
     return False
 
 
+# ---------- N041: Owner extractor (conservative, no hallucinations) ----------
+
+_CORP_WORDS = re.compile(
+    r"\b(?:Inc|LLC|Corp|Corporation|Company|Services|Group|Team|Studio|"
+    r"Salon|Shop|Store|Center|Clinic|Pet|Dog|Cat|Grooming|Roofing|"
+    r"Movers|Moving|Towing|Detail|Restaurant)\b",
+    re.I,
+)
+_PERSON_NAME = re.compile(r"^[A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]+){1,2}$")
+
+
+def _looks_like_person_name(s):
+    if not s:
+        return False
+    s = s.strip()
+    if len(s) < 4 or len(s) > 60:
+        return False
+    if _CORP_WORDS.search(s):
+        return False
+    return bool(_PERSON_NAME.match(s))
+
+
+def extract_owner_from_html(text):
+    """Conservative owner-name extractor. Returns name or None.
+
+    Sources (priority order):
+      1. <meta name="author" content="...">
+      2. JSON-LD "founder"/"author" name
+      3. "Owner: X" / "Founded by X" / "Owned by X" / "Proprietor: X" text patterns
+      4. "About <Name>, owner" pattern
+    Never returns a name unless it passes _looks_like_person_name (rejects corp words).
+    """
+    if not text:
+        return None
+
+    m = re.search(
+        r'<meta\s+name=["\']author["\']\s+content=["\']([^"\']{2,60})["\']',
+        text, re.I,
+    )
+    if m and _looks_like_person_name(m.group(1)):
+        return m.group(1).strip()
+
+    m = re.search(
+        r'"(?:founder|author)"\s*:\s*\{\s*"name"\s*:\s*"([^"]{2,60})"',
+        text, re.I,
+    )
+    if m and _looks_like_person_name(m.group(1)):
+        return m.group(1).strip()
+
+    patterns = [
+        r'\b(?:Owner|Founder|Owned by|Founded by|Proprietor)\s*[:\-]?\s*'
+        r'([A-Z][a-z\'\-]+(?:\s+[A-Z][a-z\'\-]+){1,2})',
+        r'(?:Meet|About)\s+([A-Z][a-z\'\-]+(?:\s+[A-Z][a-z\'\-]+){1,2})\s*[,\-]\s*(?:the\s+)?(?:owner|founder|proprietor)',
+        r'([A-Z][a-z\'\-]+(?:\s+[A-Z][a-z\'\-]+){1,2})\s*[,\-]\s*(?:owner|founder|proprietor)\b',
+    ]
+    for pat in patterns:
+        m = re.search(pat, text)
+        if m and _looks_like_person_name(m.group(1)):
+            return m.group(1).strip()
+
+    return None
+
+
+# ---------- N044/N045: Website health + pain-point tags ----------
+
+def pain_points_from_html(text, url, status=200):
+    """Detect operator-relevant weaknesses from a page response.
+
+    Returns a list of short tag strings (max 5). These become cold-call ammo.
+    Conservative: only emit tags backed by an observable signal in the HTML.
+    """
+    tags = []
+    if status and status >= 400:
+        tags.append(f"site error {status}")
+        return tags
+    if not text:
+        tags.append("empty page")
+        return tags
+
+    tl = text.lower()
+
+    if isinstance(url, str) and url.startswith("http://"):
+        tags.append("no SSL")
+
+    if "viewport" not in tl:
+        tags.append("weak mobile")
+
+    booking_keys = (
+        "book online", "online booking", "schedule online", "book now",
+        "schedule appointment", "online appointment", "request appointment",
+        "request a quote", "instant quote", "get a quote",
+    )
+    if not any(k in tl for k in booking_keys):
+        tags.append("no online booking")
+
+    if "<form" not in tl:
+        tags.append("no contact form")
+
+    years = re.findall(r"(?:©|copyright|&copy;|&#169;)\s*\D{0,8}(20\d{2})", text, re.I)
+    if years:
+        latest = max(int(y) for y in years)
+        current = datetime.now().year
+        if current - latest >= 2:
+            tags.append(f"copyright {latest}")
+
+    if "facebook.com" not in tl and "instagram.com" not in tl and "tiktok.com" not in tl:
+        tags.append("no social presence")
+
+    return tags[:5]
+
+
 def score_lead(lead):
     """Score a lead 0-100 with a label (HOT/GOOD/WEAK) and a signal trace.
 

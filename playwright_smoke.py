@@ -193,6 +193,37 @@ def run_tests():
                   set(tier_chips) >= set(str(i) for i in range(1, 7)),
                   f"got tiers {tier_chips}")
 
+            # 22. One-click campaign presets rendered
+            preset_btns = page.locator("#campaign-presets form button")
+            check("22. one-click campaign preset buttons present",
+                  preset_btns.count() >= 3, f"count={preset_btns.count()}")
+
+            # 23. Welcome banner shows when resume_state is true
+            #     (we have an ACTIVE campaign, so banner must appear)
+            wb = page.locator(".welcome")
+            check("23. welcome banner appears when active campaign exists",
+                  wb.count() >= 1)
+
+            # 24. HOT-only quick filter changes the score select
+            qhot = page.locator("#quick-hot")
+            if qhot.count():
+                qhot.click()
+                v = page.eval_on_selector("#filter-score", "el => el.value")
+                check("24. HOT-only button sets score filter to HOT", v == "HOT",
+                      f"got {v!r}")
+                page.locator("#quick-clear").click()
+            else:
+                check("24. HOT-only button sets score filter to HOT", False,
+                      "#quick-hot not found")
+
+            # 25. 'Next' button exists on call cards (skipped if no call cards yet)
+            next_btns = page.locator(".next-btn")
+            if page.locator(".call-card").count() > 0:
+                check("25. Next button present on call cards",
+                      next_btns.count() >= 1, f"count={next_btns.count()}")
+            else:
+                check("25. Next button (no call cards in fixture, skipped)", True)
+
         finally:
             browser.close()
 

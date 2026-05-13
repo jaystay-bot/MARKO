@@ -50,9 +50,12 @@
     }
   ],
   "campaign_presets": [
-    {"id": "CP001", "name": "GroomerOS", "project": "groomeros"},
-    {"id": "CP002", "name": "BookerMove", "project": "bookermove"},
-    {"id": "CP003", "name": "TalkBot", "project": "talkbot"}
+    {"id": "CP001", "name": "GroomerOS RVA", "project": "groomeros", "niche": "dog groomers", "city": "Richmond", "state": "VA"},
+    {"id": "CP002", "name": "BookerMove RVA", "project": "bookermove", "niche": "movers", "city": "Richmond", "state": "VA"},
+    {"id": "CP003", "name": "TalkBot Local", "project": "talkbot", "niche": "med spas", "city": "Richmond", "state": "VA"},
+    {"id": "CP004", "name": "Movers Virginia", "project": "bookermove", "niche": "movers", "city": "Virginia", "state": "VA"},
+    {"id": "CP005", "name": "Roofers RVA", "project": "talkbot", "niche": "roofers", "city": "Richmond", "state": "VA"},
+    {"id": "CP006", "name": "Detailers Local", "project": "talkbot", "niche": "detailing", "city": "Colonial Heights", "state": "VA"}
   ],
   "niche_presets": [
     "movers",

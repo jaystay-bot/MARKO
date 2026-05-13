@@ -172,6 +172,14 @@
       "count": 21,
       "campaign_id": null,
       "status": null
+    },
+    {
+      "timestamp": "2026-05-12T21:25:39.296151",
+      "action": "export",
+      "scope": "leads",
+      "count": 21,
+      "campaign_id": null,
+      "status": null
     }
   ]
 }

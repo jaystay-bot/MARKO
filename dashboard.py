@@ -43,6 +43,19 @@ def index():
     commands.annotate_leads(leads)
     call_first = commands.call_queue(limit=10)
 
+    # N050: touch count per lead (any send/called/retry_status event in log)
+    touch_counts = {}
+    for e in log:
+        lid = e.get("lead_id")
+        if lid:
+            touch_counts[lid] = touch_counts.get(lid, 0) + 1
+
+    # N048: session resume context — active campaign + top HOT lead with phone
+    active_campaign = next((c for c in campaigns if c.get("status") == "ACTIVE"), None)
+    top_hot = next((l for l in call_first if l.get("_label") == "HOT"), None) \
+              or (call_first[0] if call_first else None)
+    resume_state = bool(active_campaign or top_hot)
+
     is_vercel = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
 
     message = request.args.get("message", "")
@@ -58,6 +71,10 @@ def index():
         cities=cities,
         retry_eligible=retry_eligible,
         call_first=call_first,
+        touch_counts=touch_counts,
+        active_campaign=active_campaign,
+        top_hot=top_hot,
+        resume_state=resume_state,
         max_retries=commands.MAX_RETRIES,
         daily_cap=commands.DAILY_SEND_CAP,
         cooldown_minutes=commands.RETRY_COOLDOWN_MINUTES,
@@ -146,6 +163,18 @@ def lead_reset(lead_id):
 def lead_called(lead_id):
     ok = commands.mark_called(lead_id)
     msg = f"Lead {lead_id} marked CALLED" if ok else f"Lead {lead_id} not found"
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/campaign/preset/<preset_id>", methods=["POST"])
+def campaign_preset(preset_id):
+    """N049: one-click campaign from templates.json preset."""
+    templates_data = commands.get_templates()
+    p = next((cp for cp in templates_data.get("campaign_presets", []) if cp.get("id") == preset_id), None)
+    if not p:
+        return redirect(url_for("index", message=f"Preset {preset_id} not found"))
+    commands.marko_run(p["name"], p["project"])
+    msg = f"Created campaign {p['name']} (niche: {p.get('niche','-')}, area: {p.get('city','-')})"
     return redirect(url_for("index", message=msg))
 
 

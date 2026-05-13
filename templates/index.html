@@ -159,6 +159,15 @@
         .call-card .phone { font-family: ui-monospace, Menlo, monospace; }
         .tier-chip { font-size: 11px; padding: 3px 8px; }
         .tier-chip .t-num { background: var(--accent); color: #001b10; padding: 1px 5px; border-radius: 8px; margin-right: 4px; font-weight: 600; }
+        .welcome { background: linear-gradient(90deg, #0e7c5a 0%, #0a6b48 100%); color: #fff; padding: 14px 18px; border-radius: 8px; margin-bottom: 16px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; }
+        .welcome .resume-title { font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.9; }
+        .welcome .resume-line { font-size: 13px; opacity: 0.95; }
+        .welcome a, .welcome .btn { color: #001b10; }
+        .pain-tag { display: inline-block; background: #44290b; color: #ffb627; border: 1px solid #ffb62744; padding: 1px 7px; border-radius: 10px; font-size: 11px; margin: 1px 2px; }
+        .touch-badge { display: inline-block; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); padding: 1px 7px; border-radius: 10px; font-size: 10px; }
+        .preset-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+        .preset-row .btn { font-size: 12px; padding: 6px 10px; }
+        .next-btn { font-size: 11px; padding: 2px 8px; }
         .preview-out { background: var(--panel2); padding: 10px; border-radius: 4px; margin-top: 6px; border-left: 3px solid var(--accent); font-size: 12px; white-space: pre-wrap; display: none; }
         .preview-out.show { display: block; }
         @media (max-width: 640px) {
@@ -192,6 +201,29 @@
         </div>
         {% endif %}
         {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+
+        {% if resume_state %}
+        <div class="welcome">
+            <div>
+                <div class="resume-title">Welcome back</div>
+                <div class="resume-line">
+                    {% if active_campaign %}Active campaign: <strong>{{ active_campaign.name }}</strong> <span class="pill">{{ active_campaign.id }}</span>{% endif %}
+                    {% if active_campaign and top_hot %} · {% endif %}
+                    {% if top_hot %}Next call: <strong>{{ top_hot.name }}</strong> <span class="score-badge score-{{ top_hot._label }}" style="margin-left:4px;">{{ top_hot._label }} {{ top_hot._score }}</span>{% endif %}
+                </div>
+            </div>
+            {% if top_hot %}
+            <div class="row">
+                <span class="phone" style="font-family:ui-monospace,Menlo,monospace;">{{ top_hot.phone }}</span>
+                <button type="button" class="btn muted copy-btn" data-copy="{{ top_hot.phone }}" title="Copy phone">⧉</button>
+                <a class="btn" href="#callfirst">Open Call First →</a>
+                <form action="/lead/{{ top_hot.id }}/called" method="post" class="inline">
+                    <button type="submit" class="btn muted">Mark CALLED</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
 
         <section class="section" id="home">
             <h2>Home</h2>
@@ -230,12 +262,14 @@
             {% if call_first %}
             <p style="color:var(--muted); font-size:12px; margin:0 0 10px;">Sorted by quality score (signals: email, phone, website, owner, contact page, locality). Phone required. Already-CALLED leads excluded.</p>
             {% for l in call_first %}
-            <div class="call-card">
+            {% set touches = touch_counts.get(l.id, 0) %}
+            <div class="call-card" data-lead-id="{{ l.id }}">
                 <div class="row1">
                     <div>
                         <span class="score-badge score-{{ l._label }}">{{ l._label }} {{ l._score }}</span>
                         <span class="biz">{{ l.name }}</span>
                         {% if l.owner %}<span class="meta">— {{ l.owner }}</span>{% endif %}
+                        {% if touches %}<span class="touch-badge" title="prior outreach events for this lead">touched {{ touches }}×</span>{% endif %}
                     </div>
                     <div>
                         <span class="phone">{{ l.phone }}</span>
@@ -246,6 +280,12 @@
                         {% endif %}
                     </div>
                 </div>
+                {% if l.pain_points %}
+                <div style="margin-top:6px;">
+                    <span style="color:var(--muted); font-size:11px; margin-right:4px;">call ammo:</span>
+                    {% for tag in l.pain_points %}<span class="pain-tag">{{ tag }}</span>{% endfor %}
+                </div>
+                {% endif %}
                 <div class="row1" style="margin-top:6px;">
                     <div class="meta">
                         {% if l.city %}{{ l.city }}{% if l.state %}, {{ l.state }}{% endif %} · {% endif %}
@@ -254,6 +294,7 @@
                     </div>
                     <div>
                         {% if l.website %}<a href="{{ l.website }}" target="_blank" rel="noopener" style="color:var(--link); font-size:12px;">open ↗</a>{% endif %}
+                        <button type="button" class="btn muted next-btn" data-from="{{ l.id }}">Next →</button>
                         <form action="/lead/{{ l.id }}/called" method="post" class="inline">
                             <button type="submit" style="font-size:12px;">Mark CALLED</button>
                         </form>
@@ -355,6 +396,14 @@
 
         <section class="section" id="campaigns">
             <h2>Campaigns <a class="btn muted" href="/export/campaigns.csv" style="float:right;">Export CSV</a></h2>
+            <div class="preset-row" id="campaign-presets">
+                <span style="color:var(--muted); font-size:12px; align-self:center; margin-right:4px;">one-click preset:</span>
+                {% for p in templates.campaign_presets %}
+                <form action="/campaign/preset/{{ p.id }}" method="post" class="inline">
+                    <button type="submit" class="btn muted" title="Creates {{ p.name }} ({{ p.niche }} in {{ p.city }}, {{ p.state }})">+ {{ p.name }}</button>
+                </form>
+                {% endfor %}
+            </div>
             <form action="/run" method="post" class="row" style="margin-bottom:14px;">
                 <input list="preset-options" type="text" name="name" placeholder="campaign name" required class="grow">
                 <datalist id="preset-options">
@@ -453,6 +502,11 @@
                 <input list="niche-options" type="text" name="niche" placeholder="niche" required>
                 <button type="submit">Add Lead</button>
             </form>
+            <div class="row" style="margin-bottom:8px;">
+                <span style="color:var(--muted); font-size:12px;">quick:</span>
+                <button type="button" class="btn muted" id="quick-hot" title="show HOT leads only">🔥 HOT only</button>
+                <button type="button" class="btn muted" id="quick-clear" title="clear all filters">clear filters</button>
+            </div>
             <div class="row" style="margin-bottom:10px;">
                 <input type="text" id="lead-search" placeholder="search name / email / city..." class="grow">
                 <select id="filter-status">
@@ -487,7 +541,7 @@
                 <tr>
                     <th>ID</th><th>Quality</th><th>Business</th><th>Owner</th><th>Email</th><th>Phone</th>
                     <th>Website</th><th>City</th><th>Niche</th><th>Status</th><th>Retries</th>
-                    <th>Campaign</th><th>Source</th><th>Actions</th>
+                    <th>Touches</th><th>Pain Points</th><th>Campaign</th><th>Actions</th>
                 </tr>
                 {% for l in leads %}
                 <tr data-status="{{ l.status }}" data-niche="{{ l.niche or '' }}" data-contact="{{ l.contact_type or '' }}"
@@ -514,8 +568,11 @@
                     <td>{{ l.niche }}</td>
                     <td class="status-{{ l.status }}">{{ l.status }}</td>
                     <td style="text-align:center;">{{ l.retry_count or 0 }}</td>
+                    <td style="text-align:center;">{{ touch_counts.get(l.id, 0) }}</td>
+                    <td>
+                        {% for tag in (l.pain_points or [])[:3] %}<span class="pain-tag">{{ tag }}</span>{% endfor %}
+                    </td>
                     <td>{{ l.campaign_id or '-' }}</td>
-                    <td style="font-size:11px;">{{ l.source or '-' }}</td>
                     <td>
                         {% if l.status == "RETRY" %}
                         <form action="/lead/{{ l.id }}/reset" method="post" class="inline">
@@ -658,6 +715,36 @@
             btn.addEventListener('click', () => {
                 document.getElementById('scrape-city').value = btn.dataset.city;
                 document.getElementById('scrape-state').value = btn.dataset.state;
+            });
+        });
+
+        // Next button on Call First cards — scroll to next card
+        document.querySelectorAll('.next-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const card = btn.closest('.call-card');
+                if (!card) return;
+                let n = card.nextElementSibling;
+                while (n && !n.classList.contains('call-card')) n = n.nextElementSibling;
+                if (n) n.scrollIntoView({behavior: 'smooth', block: 'center'});
+                else card.style.opacity = '0.5';
+            });
+        });
+
+        // HOT-only quick filter + clear
+        const qHot = document.getElementById('quick-hot');
+        const qClear = document.getElementById('quick-clear');
+        if (qHot) qHot.addEventListener('click', () => {
+            const sc = document.getElementById('filter-score');
+            sc.value = 'HOT';
+            sc.dispatchEvent(new Event('change'));
+            document.getElementById('leads').scrollIntoView({behavior: 'smooth'});
+        });
+        if (qClear) qClear.addEventListener('click', () => {
+            ['lead-search','filter-status','filter-niche','filter-contact','filter-score'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.value = '';
+                el.dispatchEvent(new Event('change'));
             });
         });
 

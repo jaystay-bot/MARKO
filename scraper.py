@@ -83,33 +83,53 @@ def _extract_from_text(text):
 
 
 def extract_contact_from_url(url):
-    """Extract email and phone from the homepage and same-domain subpages.
+    """Extract contact + intel from a business homepage and same-domain subpages.
 
-    Walks /contact, /contact-us, /about, /about-us, /services in order, stopping
-    as soon as both email and phone are found. Failed pages are skipped silently.
+    Walks /contact, /contact-us, /about, /about-us, /services. For each page that
+    returns 200, parses for email, phone, owner name, and operator pain-point tags.
+    Aggregates across pages -- the union of pain-points and the first found owner.
+    Stops walking once we have both email and phone (owner/tags still aggregate
+    from already-fetched pages).
+
+    Returns: (email, phone, owner, pain_points)
     """
     email = None
     phone = None
+    owner = None
+    pain_tags = []
     seen = set()
     candidates = [url] + _same_domain_subpages(url)
+
     for page in candidates:
         if not page or page in seen:
             continue
         seen.add(page)
         try:
             resp = requests.get(page, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-            if getattr(resp, "status_code", 0) != 200:
+            status = getattr(resp, "status_code", 0)
+            if status != 200:
                 continue
-            e, p = _extract_from_text(resp.text)
+            text = resp.text
+            e, p = _extract_from_text(text)
         except Exception:
             continue
         if not email and e:
             email = e
         if not phone and p:
             phone = p
+        if not owner:
+            o = commands.extract_owner_from_html(text)
+            if o:
+                owner = o
+        # Only run pain-point analysis on the homepage (cheapest signal,
+        # subpages would just re-detect the same site-level issues)
+        if page == url and not pain_tags:
+            pain_tags = commands.pain_points_from_html(text, page, status)
         if email and phone:
+            # we have full contact; subpages won't add more, stop
             break
-    return email, phone
+
+    return email, phone, owner, pain_tags
 
 
 def get_contact_type(email, phone):
@@ -202,7 +222,10 @@ def scrape(niche, city, state, max_results=20):
             continue
 
         print(f"  Checking: {name[:40]}...")
-        email, phone = extract_contact_from_url(url) if url else (None, None)
+        if url:
+            email, phone, owner, pain_points = extract_contact_from_url(url)
+        else:
+            email, phone, owner, pain_points = (None, None, None, [])
 
         # Must have at least one contact method
         contact_type = get_contact_type(email, phone)
@@ -220,6 +243,7 @@ def scrape(niche, city, state, max_results=20):
         lead = {
             "id": new_id,
             "name": name,
+            "owner": owner,
             "city": city,
             "state": state,
             "website": url,
@@ -232,11 +256,14 @@ def scrape(niche, city, state, max_results=20):
             "source": "scrape",
             "campaign_id": campaign_id,
             "created_at": datetime.now().isoformat(),
+            "pain_points": pain_points,
         }
 
         leads.append(lead)
         added += 1
-        print(f"    + Added [{contact_type}]: {email or ''} {phone or ''}")
+        owner_note = f" owner={owner}" if owner else ""
+        tags_note = f" tags={pain_points}" if pain_points else ""
+        print(f"    + Added [{contact_type}]: {email or ''} {phone or ''}{owner_note}{tags_note}")
 
     data["leads"] = leads
     save_leads(data)

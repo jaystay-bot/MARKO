@@ -80,7 +80,7 @@ def test_subpage_extraction():
         "https://acme.example/contact": "<html>reach us at hello@acme.example or 804-555-1234</html>",
     }
     with mock.patch.object(scraper.requests, "get", side_effect=_fake_get_factory(pages)):
-        email, phone = scraper.extract_contact_from_url("https://acme.example/")
+        email, phone, owner, tags = scraper.extract_contact_from_url("https://acme.example/")
     check("email pulled from /contact", email == "hello@acme.example", f"got {email!r}")
     check("phone pulled from /contact", phone == "804-555-1234", f"got {phone!r}")
 
@@ -90,7 +90,7 @@ def test_subpage_extraction():
         "https://b.example/about": "<html>call 555-867-5309</html>",
     }
     with mock.patch.object(scraper.requests, "get", side_effect=_fake_get_factory(pages2)):
-        email, phone = scraper.extract_contact_from_url("https://b.example/")
+        email, phone, owner, tags = scraper.extract_contact_from_url("https://b.example/")
     check("email from homepage aggregated", email == "hi@b.example", f"got {email!r}")
     check("phone from /about aggregated", phone == "555-867-5309", f"got {phone!r}")
 
@@ -374,6 +374,92 @@ def test_mark_called():
         check("mark_called returns False for missing lead", not ok2)
 
 
+def test_owner_extractor():
+    print("test_owner_extractor")
+    # 1) meta author
+    html_meta = '<html><head><meta name="author" content="Sarah Johnson"></head></html>'
+    check("owner from meta[name=author]",
+          commands.extract_owner_from_html(html_meta) == "Sarah Johnson")
+    # 2) JSON-LD founder
+    html_ld = '<script type="application/ld+json">{"@type":"LocalBusiness","founder":{"name":"Pat O\'Brien"}}</script>'
+    check("owner from JSON-LD founder",
+          commands.extract_owner_from_html(html_ld) == "Pat O'Brien")
+    # 3) "Owner: X" pattern
+    html_text = "<p>Founded by Maria Lopez in 2010.</p>"
+    check("owner from 'Founded by' text pattern",
+          commands.extract_owner_from_html(html_text) == "Maria Lopez")
+    # 4) "X, owner" suffix pattern
+    html_suffix = "<p>Meet Robert Smith, the owner and head groomer.</p>"
+    check("owner from 'Meet X, the owner' pattern",
+          commands.extract_owner_from_html(html_suffix) == "Robert Smith")
+    # 5) Conservative: corp word in "name" rejected
+    html_corp = '<meta name="author" content="Acme Services Inc">'
+    check("owner extractor rejects corp words (Acme Services Inc)",
+          commands.extract_owner_from_html(html_corp) is None,
+          f"got {commands.extract_owner_from_html(html_corp)!r}")
+    # 6) Conservative: lowercase / single word rejected
+    html_weak = '<meta name="author" content="admin">'
+    check("owner extractor rejects single lowercase word",
+          commands.extract_owner_from_html(html_weak) is None)
+    # 7) None on empty input
+    check("owner extractor returns None on empty",
+          commands.extract_owner_from_html("") is None)
+
+
+def test_pain_points():
+    print("test_pain_points")
+    # Healthy site: no tags except 'no online booking' if missing keyword
+    html_healthy = (
+        '<html><head><meta name="viewport" content="width=device-width">'
+        '</head><body>book online · &copy; 2026 · '
+        '<form>contact</form>'
+        '<a href="https://facebook.com/x">fb</a></body></html>'
+    )
+    tags = commands.pain_points_from_html(html_healthy, "https://x.com", 200)
+    check("healthy site has no pain tags", tags == [], f"got {tags}")
+
+    # Weak: http, no viewport, no booking, no form, old copyright, no social
+    html_weak = "<html><body>welcome &copy; 2020</body></html>"
+    tags = commands.pain_points_from_html(html_weak, "http://x.com", 200)
+    check("weak site flags no SSL", "no SSL" in tags)
+    check("weak site flags weak mobile", "weak mobile" in tags)
+    check("weak site flags no online booking", "no online booking" in tags)
+    check("weak site flags no contact form", "no contact form" in tags)
+    check("weak site flags stale copyright", any("copyright 2020" in t for t in tags))
+
+    # Error status
+    err = commands.pain_points_from_html("", "https://x.com", 500)
+    check("error status emits site-error tag", any("site error" in t for t in err))
+
+    # Cap at 5
+    check("pain-points capped at 5", len(tags) <= 5)
+
+
+def test_campaign_preset_route():
+    print("test_campaign_preset_route")
+    # Route smoke: import dashboard, simulate via test client
+    with tempfile.TemporaryDirectory() as tmp:
+        _seed(tmp)
+        # Write a known templates.json with a single preset
+        with open(commands.TEMPLATES_FILE, "w") as f:
+            json.dump({"outreach": [], "campaign_presets": [
+                {"id": "CPX", "name": "TestPreset", "project": "tp",
+                 "niche": "movers", "city": "Richmond", "state": "VA"}
+            ], "niche_presets": [], "location_presets": []}, f)
+        import dashboard
+        dashboard.CAMPAIGNS_FILE = commands.CAMPAIGNS_FILE
+        dashboard.LEADS_FILE = commands.LEADS_FILE
+        dashboard.LOG_FILE = commands.LOG_FILE
+        client = dashboard.app.test_client()
+        resp = client.post("/campaign/preset/CPX", follow_redirects=False)
+        check("/campaign/preset/CPX returns 302 redirect",
+              resp.status_code == 302, f"got {resp.status_code}")
+        camps = json.load(open(commands.CAMPAIGNS_FILE))["campaigns"]
+        names = [c["name"] for c in camps]
+        check("/campaign/preset/CPX creates a campaign named TestPreset",
+              "TestPreset" in names, f"got {names}")
+
+
 def main():
     test_subpage_extraction()
     test_dedup()
@@ -387,6 +473,9 @@ def main():
     test_score_lead_signals()
     test_call_queue()
     test_mark_called()
+    test_owner_extractor()
+    test_pain_points()
+    test_campaign_preset_route()
     fails = [(n, d) for n, ok, d in results if not ok]
     print(f"\n{len(results) - len(fails)}/{len(results)} passed")
     if fails:
