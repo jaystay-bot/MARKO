@@ -4,6 +4,7 @@ from flask import Flask, render_template, request, redirect, url_for, Response, 
 import json
 import os
 import commands
+import marko_compliance
 import marko_intel
 import scraper
 
@@ -61,11 +62,38 @@ def index():
         if lid:
             touch_counts[lid] = touch_counts.get(lid, 0) + 1
 
-    # N048: session resume context — active campaign + top HOT lead with phone
+    # N048: session resume context — active campaign + top HOT lead with phone.
+    # N182: prefer MONEY tier above HOT now that scoring is 5-tier.
     active_campaign = next((c for c in campaigns if c.get("status") == "ACTIVE"), None)
-    top_hot = next((l for l in call_first if l.get("_label") == "HOT"), None) \
-              or (call_first[0] if call_first else None)
+    top_hot = (next((l for l in call_first if l.get("_label") == "MONEY"), None)
+               or next((l for l in call_first if l.get("_label") == "HOT"), None)
+               or (call_first[0] if call_first else None))
     resume_state = bool(active_campaign or top_hot)
+
+    # N181: MAKE MONEY TODAY banner counts
+    try:
+        money_pipeline = commands.pipeline_summary()
+    except Exception:
+        money_pipeline = None
+
+    # N121: Money Mode — "what should Jay do right now?" aggregator.
+    # N122: compliance state for the outbound safety banner.
+    try:
+        money_mode_data = commands.money_mode(sender_name=sender_name)
+    except Exception as exc:
+        money_mode_data = {"blockers": [f"money_mode failed: {exc}"], "call_now": [],
+                           "email_safe": [], "followup": [], "pipeline_low": 0,
+                           "pipeline_high": 0, "best_niche": None, "deliverability": [],
+                           "sends_today": 0, "cap_remaining": commands.DAILY_SEND_CAP,
+                           "daily_cap": commands.DAILY_SEND_CAP}
+    config_for_view = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
+    compliance_state = {
+        "config_blockers": marko_compliance.config_blockers(config_for_view),
+        "deliverability": marko_compliance.deliverability_checklist(config_for_view),
+        "safe_to_send": not marko_compliance.config_blockers(config_for_view)
+                        and money_mode_data.get("cap_remaining", 0) > 0,
+        "stop_list_size": len(config_for_view.get("stop_contact_list") or []),
+    }
 
     is_vercel = bool(os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"))
 
@@ -86,6 +114,10 @@ def index():
         active_campaign=active_campaign,
         top_hot=top_hot,
         resume_state=resume_state,
+        money_pipeline=money_pipeline,
+        money_mode=money_mode_data,
+        compliance=compliance_state,
+        lead_statuses=commands.LEAD_STATUSES,
         max_retries=commands.MAX_RETRIES,
         daily_cap=commands.DAILY_SEND_CAP,
         cooldown_minutes=commands.RETRY_COOLDOWN_MINUTES,
@@ -113,7 +145,22 @@ def add_lead():
 
 @app.route("/send", methods=["POST"])
 def send():
-    dry = request.form.get("dry_run") == "1"
+    # N122: dry_run defaults ON. Operator must explicitly check "real send".
+    dry = request.form.get("dry_run", "1") == "1"
+
+    # N122: compliance gate. Real sends are refused when config is missing
+    # required compliance fields (sender, unsubscribe text, address, etc).
+    if not dry:
+        try:
+            cfg = commands.get_config()
+        except Exception:
+            cfg = {}
+        config_blockers = marko_compliance.config_blockers(cfg)
+        if config_blockers:
+            msg = ("BLOCKED — fix Compliance panel before real sends: "
+                   + "; ".join(config_blockers))
+            return redirect(url_for("index", message=msg))
+
     result = commands.marko_send(dry_run=dry) or "Batch sent"
     if dry:
         result = result + " (dry run)"
@@ -177,6 +224,59 @@ def lead_called(lead_id):
     return redirect(url_for("index", message=msg))
 
 
+@app.route("/lead/<lead_id>/disposition/<disposition>", methods=["POST"])
+def lead_disposition(lead_id, disposition):
+    """N127: set a follow-up disposition on a lead.
+
+    Allowed values match commands.LEAD_STATUSES so unknown inputs are rejected.
+    Used by Call First card buttons (Interested / Booked / Not Interested / DNC).
+    """
+    disp = (disposition or "").upper()
+    ok = commands.set_lead_disposition(lead_id, disp)
+    if ok:
+        msg = f"Lead {lead_id} → {disp}"
+    else:
+        msg = (f"Lead {lead_id} not found, or disposition '{disp}' rejected "
+               f"(allowed: {', '.join(commands.LEAD_STATUSES)})")
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/lead/<lead_id>/stop", methods=["POST"])
+def lead_stop(lead_id):
+    """N122: one-click do-not-contact on a lead.
+
+    Sets status=DNC and writes do_not_contact=true so every compliance check
+    refuses any future send to this lead.
+    """
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") == lead_id:
+            l["status"] = "DNC"
+            l["do_not_contact"] = True
+            l["last_attempt_at"] = __import__("datetime").datetime.now().isoformat()
+            with open(LEADS_FILE, "w") as f:
+                json.dump(data, f, indent=2)
+            commands.log_action({"action": "lead_status", "lead_id": lead_id,
+                                 "status": "DNC", "reason": "stop_button"})
+            return redirect(url_for("index", message=f"Lead {lead_id} marked DO_NOT_CONTACT"))
+    return redirect(url_for("index", message=f"Lead {lead_id} not found"))
+
+
+@app.route("/api/compliance")
+def api_compliance():
+    """N122: JSON compliance state — config blockers + deliverability checklist."""
+    try:
+        cfg = commands.get_config()
+    except Exception:
+        cfg = {}
+    return jsonify({
+        "config_blockers": marko_compliance.config_blockers(cfg),
+        "deliverability": marko_compliance.deliverability_checklist(cfg),
+        "stop_list_size": len(cfg.get("stop_contact_list") or []),
+        "no_contact_statuses": sorted(marko_compliance.NO_CONTACT_STATUSES),
+    })
+
+
 @app.route("/lead/<lead_id>/intel")
 def lead_intel(lead_id):
     """N081: full intel JSON for a single lead.
@@ -234,11 +334,42 @@ def lead_email(lead_id, kind):
         return jsonify({"error": "lead not found", "id": lead_id}), 404
 
     sender = "Jay"
+    config = {}
+    try:
+        config = commands.get_config()
+        sender = config.get("sender_name", "Jay")
+    except Exception:
+        pass
+    return jsonify(marko_intel.generate_email(
+        lead, kind=kind, sender_name=sender, config=config))
+
+
+@app.route("/lead/<lead_id>/voicemail")
+def lead_voicemail(lead_id):
+    """N183: short voicemail script for one lead. JSON; never auto-sends."""
+    leads = load_json(LEADS_FILE).get("leads", [])
+    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    if not lead:
+        return jsonify({"error": "lead not found", "id": lead_id}), 404
+    sender = "Jay"
     try:
         sender = commands.get_config().get("sender_name", "Jay")
     except Exception:
         pass
-    return jsonify(marko_intel.generate_email(lead, kind=kind, sender_name=sender))
+    return jsonify({
+        "id": lead.get("id"),
+        "script": marko_intel.generate_voicemail(lead, sender_name=sender),
+    })
+
+
+@app.route("/lead/<lead_id>/why")
+def lead_why(lead_id):
+    """N191: structured 'why they buy' angle for one lead. JSON."""
+    leads = load_json(LEADS_FILE).get("leads", [])
+    lead = next((l for l in leads if l.get("id") == lead_id), None)
+    if not lead:
+        return jsonify({"error": "lead not found", "id": lead_id}), 404
+    return jsonify(marko_intel.why_they_buy(lead))
 
 
 @app.route("/campaign/preset/<preset_id>", methods=["POST"])

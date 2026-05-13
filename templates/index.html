@@ -177,6 +177,33 @@
         .pain-tag { display: inline-block; background: #44290b; color: #ffb627; border: 1px solid #ffb62744; padding: 1px 7px; border-radius: 10px; font-size: 11px; margin: 1px 2px; }
         .touch-badge { display: inline-block; background: var(--panel2); border: 1px solid var(--border); color: var(--muted); padding: 1px 7px; border-radius: 10px; font-size: 10px; }
         .money-chip { display: inline-block; background: #0a3a26; color: #4ade80; border: 1px solid #4ade8044; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+        /* N121: Money Mode home — 6-card action grid */
+        .money-section { background: linear-gradient(180deg,#0e1a14,#0a0f0c); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
+        .money-section h2 { margin: 0 0 4px; color: var(--accent); letter-spacing: 0.06em; }
+        .money-section .sub { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+        .money-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 10px; }
+        .money-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+        .money-card .mc-title { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .money-card .mc-big { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1.1; }
+        .money-card .mc-list { font-size: 12px; color: var(--muted); margin: 0; padding: 0; list-style: none; }
+        .money-card .mc-list li { padding: 2px 0; border-bottom: 1px dashed transparent; }
+        .money-card a { color: var(--link); text-decoration: none; }
+        .money-card a:hover { text-decoration: underline; }
+        /* N122: Compliance bar */
+        .compliance-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+        .compliance-bar.ok { background: #0a3a26; color: #4ade80; border: 1px solid #4ade8044; }
+        .compliance-bar.bad { background: #3a0a0a; color: #ff6b6b; border: 1px solid #ff6b6b44; }
+        .compliance-bar .cb-icon { font-size: 16px; }
+        .compliance-bar .cb-list { color: inherit; opacity: 0.85; font-size: 12px; }
+        .deliv-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 6px; margin-top: 8px; font-size: 12px; }
+        .deliv-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+        .deliv-item.ok { color: #4ade80; }
+        .deliv-item .mark { font-family: ui-monospace,Menlo,monospace; width: 14px; text-align: center; }
+        /* N127: per-card disposition buttons */
+        .dispo-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+        .dispo-row form { display: inline; margin: 0; }
+        .dispo-row button { font-size: 11px; padding: 2px 8px; }
+        .dispo-row .dispo-dnc { color: #ff6b6b; border-color: #ff6b6b44; }
         .money-chip .conf { opacity: 0.65; font-weight: 400; margin-left: 4px; }
         .script-block { margin-top: 8px; padding: 8px 10px; background: var(--panel2); border-left: 3px solid var(--accent); border-radius: 4px; font-size: 13px; line-height: 1.4; }
         .script-block .script-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
@@ -202,6 +229,7 @@
         <h1>MARKO</h1>
         <nav>
             <a href="#home">Home</a>
+            <a href="#money">Money Mode</a>
             <a href="#callfirst">Call First</a>
             <a href="#cheatsheet">Cheat Sheet</a>
             <a href="#scrape">Scrape</a>
@@ -219,6 +247,111 @@
         </div>
         {% endif %}
         {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+
+        <section class="section money-section" id="money">
+            <h2>MAKE MONEY TODAY</h2>
+            <p class="sub">Six next-action panels driven by real lead data. No fake metrics, no auto-blast. Dry-run is on by default.</p>
+            {% if compliance.config_blockers %}
+            <div class="compliance-bar bad">
+                <span class="cb-icon">⚠</span>
+                <div>
+                    <strong>Outbound BLOCKED — compliance gaps in config.json:</strong>
+                    <div class="cb-list">{{ compliance.config_blockers|join(' · ') }}</div>
+                </div>
+            </div>
+            {% else %}
+            <div class="compliance-bar ok">
+                <span class="cb-icon">✓</span>
+                <div><strong>Compliance OK</strong> — sender + unsubscribe + address configured.
+                    {% if compliance.stop_list_size %}<span class="cb-list">{{ compliance.stop_list_size }} entries in stop-contact list.</span>{% endif %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="money-grid">
+                <div class="money-card">
+                    <div class="mc-title">Call these first</div>
+                    <div class="mc-big">{{ money_mode.call_now|length }}</div>
+                    <ul class="mc-list">
+                        {% for l in money_mode.call_now %}
+                        <li><a href="#callfirst">{{ l.name|truncate(34) }}</a> · {{ l._label }} {{ l._score }}</li>
+                        {% else %}
+                        <li>No callable leads — scrape some.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="money-card">
+                    <div class="mc-title">Email safely{% if money_mode.cap_remaining is defined %} · {{ money_mode.cap_remaining }} of {{ money_mode.daily_cap }} cap left{% endif %}</div>
+                    <div class="mc-big">{{ money_mode.email_safe|length }}</div>
+                    <ul class="mc-list">
+                        {% for l in money_mode.email_safe[:5] %}
+                        <li>{{ l.name|truncate(34) }} · {{ l._label }} {{ l._score }}</li>
+                        {% else %}
+                        <li>{% if compliance.config_blockers %}Fix compliance to unlock.{% else %}No NEW emailable leads.{% endif %}</li>
+                        {% endfor %}
+                        {% if money_mode.email_safe|length > 5 %}<li style="color:var(--muted);">+{{ money_mode.email_safe|length - 5 }} more…</li>{% endif %}
+                    </ul>
+                </div>
+                <div class="money-card">
+                    <div class="mc-title">Follow up overdue</div>
+                    <div class="mc-big">{{ money_mode.followup|length }}</div>
+                    <ul class="mc-list">
+                        {% for l in money_mode.followup[:5] %}
+                        <li>{{ l.name|truncate(34) }} · {{ l.status }} · last {{ (l.last_attempt_at or '')[:10] }}</li>
+                        {% else %}
+                        <li>Nobody is overdue right now.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="money-card">
+                    <div class="mc-title">Best niche right now</div>
+                    {% if money_mode.best_niche %}
+                    <div class="mc-big">{{ money_mode.best_niche.niche }}</div>
+                    <ul class="mc-list">
+                        <li>avg score {{ money_mode.best_niche.avg_score }} across {{ money_mode.best_niche.count }} leads</li>
+                    </ul>
+                    {% else %}
+                    <div class="mc-big" style="color:var(--muted); font-size:14px;">Need ≥ 3 leads per niche</div>
+                    {% endif %}
+                </div>
+                <div class="money-card">
+                    <div class="mc-title">Pipeline value (HOT, uncalled)</div>
+                    {% if money_mode.pipeline_low %}
+                    <div class="mc-big">~${{ '{:,}'.format(money_mode.pipeline_low) }}–${{ '{:,}'.format(money_mode.pipeline_high) }}/mo</div>
+                    <ul class="mc-list">
+                        <li>summed from {{ money_mode.pipeline_count }} HOT leads' missed-money estimate</li>
+                    </ul>
+                    {% else %}
+                    <div class="mc-big" style="color:var(--muted); font-size:14px;">No HOT leads with weakness data yet</div>
+                    <ul class="mc-list"><li>Re-scrape to populate pain_points → estimates appear.</li></ul>
+                    {% endif %}
+                </div>
+                <div class="money-card">
+                    <div class="mc-title">Blockers before sending</div>
+                    {% if money_mode.blockers %}
+                    <div class="mc-big" style="color:#ff6b6b;">{{ money_mode.blockers|length }}</div>
+                    <ul class="mc-list">
+                        {% for b in money_mode.blockers %}<li>· {{ b }}</li>{% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="mc-big">✓ none</div>
+                    <ul class="mc-list"><li>Safe to send — dry-run still recommended first.</li></ul>
+                    {% endif %}
+                </div>
+            </div>
+            {% if compliance.deliverability %}
+            <details style="margin-top:10px;">
+                <summary style="cursor:pointer; color:var(--muted); font-size:12px;">Deliverability checklist (SPF/DKIM/DMARC + sender) — click to expand</summary>
+                <div class="deliv-grid">
+                    {% for item in compliance.deliverability %}
+                    <div class="deliv-item {% if item.ok %}ok{% endif %}">
+                        <span class="mark">{% if item.ok %}✓{% else %}·{% endif %}</span> {{ item.label }}
+                    </div>
+                    {% endfor %}
+                </div>
+                <p style="color:var(--muted); font-size:11px; margin-top:6px;">These are operator-acknowledged flags from config.json → deliverability.*, not live DNS checks. Set <code>spf_ok</code> / <code>dkim_ok</code> / <code>dmarc_ok</code> to <code>true</code> in config.json once your DNS records are published.</p>
+            </details>
+            {% endif %}
+        </section>
 
         {% if resume_state %}
         <div class="welcome">
@@ -324,6 +457,14 @@
                     </div>
                 </div>
                 {% endif %}
+                <div class="dispo-row">
+                    <form action="/lead/{{ l.id }}/disposition/INTERESTED" method="post"><button type="submit" class="btn muted">Interested</button></form>
+                    <form action="/lead/{{ l.id }}/disposition/BOOKED" method="post"><button type="submit" class="btn muted">Demo Booked</button></form>
+                    <form action="/lead/{{ l.id }}/disposition/CALLBACK" method="post"><button type="submit" class="btn muted">Callback later</button></form>
+                    <form action="/lead/{{ l.id }}/disposition/VOICEMAIL" method="post"><button type="submit" class="btn muted">Voicemail</button></form>
+                    <form action="/lead/{{ l.id }}/disposition/NOT_INTERESTED" method="post"><button type="submit" class="btn muted">Not interested</button></form>
+                    <form action="/lead/{{ l.id }}/stop" method="post" onsubmit="return confirm('Mark {{ l.name|truncate(40) }} as DO NOT CONTACT? They will be excluded from every future send.');"><button type="submit" class="btn muted dispo-dnc">🚫 DNC</button></form>
+                </div>
                 <div class="row1" style="margin-top:6px;">
                     <div class="meta">
                         {% if l.city %}{{ l.city }}{% if l.state %}, {{ l.state }}{% endif %} · {% endif %}

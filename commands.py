@@ -20,13 +20,30 @@ BATCH_HARD_CAP = 10
 TRANSIENT_SMTP_CODES = {421, 450, 451, 452}
 MAX_RETRIES = 3
 RETRY_COOLDOWN_MINUTES = 60
-LEAD_STATUSES = ["NEW", "CONTACTED", "RETRY", "FAILED", "REPLIED", "ARCHIVED", "CALLED"]
+LEAD_STATUSES = [
+    "NEW", "CONTACTED", "RETRY", "FAILED", "REPLIED", "ARCHIVED", "CALLED",
+    # N183/N194 dispositions
+    "INTERESTED", "NOT_INTERESTED", "CALLBACK", "BOOKED", "DNC", "SKIPPED",
+]
 
-# Quality scoring (N031)
+# Quality scoring (N031 → N182: 5-tier)
+SCORE_MONEY_THRESHOLD = 90    # N182: 🔥 MONEY tier — near-perfect signal set
 SCORE_HOT_THRESHOLD = 70
 SCORE_GOOD_THRESHOLD = 40
-# Statuses that should NOT appear in the call queue
-CALL_QUEUE_EXCLUDE = {"FAILED", "ARCHIVED", "CALLED"}
+SCORE_LOW_THRESHOLD = 20      # below this == DEAD
+
+# Statuses that should NOT appear in the call queue.
+# DNC / DO_NOT_CONTACT / UNSUBSCRIBED / STOP / OPTED_OUT = legal/compliance hard
+#   stop (aligned with marko_compliance.NO_CONTACT_STATUSES).
+# BOOKED / NOT_INTERESTED = closed dispositions, don't re-call.
+# SKIPPED + CALLED = already worked.
+CALL_QUEUE_EXCLUDE = {
+    "FAILED", "ARCHIVED", "CALLED", "BOOKED", "NOT_INTERESTED", "SKIPPED",
+    "DNC", "DO_NOT_CONTACT", "UNSUBSCRIBED", "STOP", "OPTED_OUT",
+}
+
+# Follow-up overdue threshold (hours since last_attempt_at on CONTACTED leads)
+FOLLOWUP_OVERDUE_HOURS = 48
 
 
 def load_json(filepath):
@@ -467,18 +484,23 @@ def _lead_csv_rows(leads):
 
 
 def export_leads_csv(campaign_id=None, status=None):
-    """Return CSV string of leads, optionally filtered."""
+    """Return CSV string of leads, optionally filtered.
+
+    Pure read: exporting must not mutate JSON or append audit log entries.
+    """
     leads = load_json(LEADS_FILE).get("leads", [])
     if campaign_id:
         leads = [l for l in leads if l.get("campaign_id") == campaign_id]
     if status:
         leads = [l for l in leads if l.get("status") == status]
-    log_action({"action": "export", "scope": "leads", "count": len(leads),
-                "campaign_id": campaign_id, "status": status})
     return _lead_csv_rows(leads)
 
 
 def export_campaigns_csv():
+    """Return CSV string of campaigns.
+
+    Pure read: exporting must not mutate JSON or append audit log entries.
+    """
     campaigns = load_json(CAMPAIGNS_FILE).get("campaigns", [])
     fields = [
         "id", "name", "project", "status", "sends", "open_rate",
@@ -489,7 +511,6 @@ def export_campaigns_csv():
     w.writeheader()
     for c in campaigns:
         w.writerow({f: c.get(f, "") for f in fields})
-    log_action({"action": "export", "scope": "campaigns", "count": len(campaigns)})
     return out.getvalue()
 
 
@@ -697,12 +718,16 @@ def score_lead(lead):
         score += 5
         signals.append("niche")
 
-    if score >= SCORE_HOT_THRESHOLD:
+    if score >= SCORE_MONEY_THRESHOLD:
+        label = "MONEY"
+    elif score >= SCORE_HOT_THRESHOLD:
         label = "HOT"
     elif score >= SCORE_GOOD_THRESHOLD:
         label = "GOOD"
+    elif score >= SCORE_LOW_THRESHOLD:
+        label = "LOW"
     else:
-        label = "WEAK"
+        label = "DEAD"
     return {"score": min(score, 100), "label": label, "signals": signals}
 
 
@@ -834,6 +859,88 @@ def campaign_breakdown():
     return breakdown
 
 
+def pipeline_summary():
+    """N181: top-of-dashboard money pipeline counts.
+
+    Pure read; no mutation. Counts derive from current lead state + log.
+    Returns a flat dict so the template can render stat tiles directly.
+    """
+    leads = load_json(LEADS_FILE).get("leads", [])
+    log = load_json(LOG_FILE).get("log", [])
+    today = datetime.now().strftime("%Y-%m-%d")
+    cutoff = datetime.now() - timedelta(hours=FOLLOWUP_OVERDUE_HOURS)
+
+    # Score each lead to count by tier
+    tier_counts = {"MONEY": 0, "HOT": 0, "GOOD": 0, "LOW": 0, "DEAD": 0}
+    for l in leads:
+        if (l.get("status") or "NEW") in CALL_QUEUE_EXCLUDE:
+            continue
+        s = score_lead(l)
+        tier_counts[s["label"]] = tier_counts.get(s["label"], 0) + 1
+
+    # Activity counts derived from log
+    calls_today = sum(1 for e in log
+                      if (e.get("timestamp") or "").startswith(today)
+                      and e.get("action") == "lead_status"
+                      and e.get("status") == "CALLED")
+    emails_today = sum(1 for e in log
+                       if (e.get("timestamp") or "").startswith(today)
+                       and e.get("action") == "send"
+                       and e.get("status") == "sent")
+    demos_booked_today = sum(1 for e in log
+                             if (e.get("timestamp") or "").startswith(today)
+                             and e.get("action") == "lead_status"
+                             and e.get("status") == "BOOKED")
+
+    # Follow-ups overdue: CONTACTED leads whose last_attempt_at is older than cutoff
+    followups_overdue = 0
+    for l in leads:
+        if l.get("status") != "CONTACTED":
+            continue
+        last = l.get("last_attempt_at")
+        if not last:
+            continue
+        try:
+            if datetime.fromisoformat(last) < cutoff:
+                followups_overdue += 1
+        except ValueError:
+            continue
+
+    return {
+        "money_count": tier_counts.get("MONEY", 0),
+        "hot_count": tier_counts.get("HOT", 0),
+        "good_count": tier_counts.get("GOOD", 0),
+        "low_count": tier_counts.get("LOW", 0),
+        "dead_count": tier_counts.get("DEAD", 0),
+        "calls_today": calls_today,
+        "emails_today": emails_today,
+        "demos_booked_today": demos_booked_today,
+        "followups_overdue": followups_overdue,
+        "followup_window_hours": FOLLOWUP_OVERDUE_HOURS,
+    }
+
+
+def set_lead_disposition(lead_id, disposition):
+    """N183/N194: set a disposition status on a lead with safety check.
+
+    Only accepts statuses in LEAD_STATUSES; rejects everything else so callers
+    can't write garbage into leads.json via /lead/<id>/disposition/<x>.
+    Returns True on success, False on bad status or missing lead.
+    """
+    if disposition not in LEAD_STATUSES:
+        return False
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") == lead_id:
+            l["status"] = disposition
+            l["last_attempt_at"] = datetime.now().isoformat()
+            save_json(LEADS_FILE, data)
+            log_action({"action": "lead_status", "lead_id": lead_id,
+                        "status": disposition})
+            return True
+    return False
+
+
 def get_stats():
     """Aggregate counts for the dashboard home section."""
     campaigns = load_json(CAMPAIGNS_FILE).get("campaigns", [])
@@ -855,4 +962,145 @@ def get_stats():
         "scrape_count": len(scrapes),
         "export_count": len(exports),
         "recent_scrapes": scrapes[-5:][::-1],
+    }
+
+
+# ---------- N121: Money Mode aggregator ----------
+#
+# "What should Jay do RIGHT NOW?" — six action-oriented sections rather than
+# stat tiles. Pure read; no mutation. Picks up compliance blockers from
+# marko_compliance so the dashboard can refuse unsafe sends.
+
+def money_mode(sender_name="Jay"):
+    """Return the six Money Mode sections for the dashboard.
+
+    Output is a dict the template renders directly. Sections:
+      call_now           — top 5 phone-callable leads sorted by score
+      email_safe         — top 10 emailable leads that pass compliance per-lead
+      followup           — up to 10 leads needing follow-up (overdue)
+      best_niche         — niche with the highest avg score (>=3 leads)
+      pipeline_low/high  — sum of missed-money for HOT+ uncontacted leads
+      blockers           — global compliance issues that block sending
+    """
+    import marko_compliance as mc
+    import marko_intel as mi
+
+    leads_data = load_json(LEADS_FILE)
+    leads = leads_data.get("leads", [])
+    config = get_config() if os.path.exists(CONFIG_FILE) else {}
+    stop_list = config.get("stop_contact_list") or []
+
+    # Score leads for ranking; reuse existing tier labels.
+    annotated = []
+    for l in leads:
+        s = score_lead(l)
+        l["_score"] = s["score"]
+        l["_label"] = s["label"]
+        l["_signals"] = s["signals"]
+        annotated.append(l)
+
+    # (1) Top 5 to CALL — has phone, not opted-out, not in stop list,
+    #     status not in CALL_QUEUE_EXCLUDE.
+    callable_now = []
+    for l in annotated:
+        if not l.get("phone"):
+            continue
+        if mc.is_no_contact(l) or mc.lead_in_stop_list(l, stop_list):
+            continue
+        if (l.get("status") or "NEW") in CALL_QUEUE_EXCLUDE:
+            continue
+        callable_now.append(l)
+    callable_now.sort(key=lambda l: (l["_score"], 1 if l.get("email") else 0),
+                      reverse=True)
+    call_now = callable_now[:5]
+
+    # (2) Top 10 to EMAIL safely — passes per-lead compliance.
+    email_safe = []
+    for l in annotated:
+        if (l.get("status") or "NEW") != "NEW":
+            continue
+        per_lead = mc.lead_blockers(l, stop_list=stop_list)
+        if per_lead:
+            continue
+        email_safe.append(l)
+    email_safe.sort(key=lambda l: l["_score"], reverse=True)
+    email_safe = email_safe[:10]
+
+    # (3) Follow-up needed — contacted/called/emailed leads whose last_attempt_at
+    #     is older than the follow-up window.
+    cutoff = datetime.now() - timedelta(hours=FOLLOWUP_OVERDUE_HOURS)
+    followup_statuses = {"CONTACTED", "CALLED", "EMAILED", "CALLBACK", "INTERESTED"}
+    followup = []
+    for l in annotated:
+        s = (l.get("status") or "").upper()
+        if s not in followup_statuses:
+            continue
+        last = l.get("last_attempt_at")
+        if last:
+            try:
+                if datetime.fromisoformat(last) > cutoff:
+                    continue
+            except ValueError:
+                pass
+        followup.append(l)
+    followup.sort(key=lambda l: l.get("last_attempt_at") or "")
+    followup = followup[:10]
+
+    # (4) Best niche — highest avg score, min 3 leads.
+    niche_totals = {}
+    niche_counts = {}
+    for l in annotated:
+        n = (l.get("niche") or "").strip()
+        if not n:
+            continue
+        niche_totals[n] = niche_totals.get(n, 0) + l["_score"]
+        niche_counts[n] = niche_counts.get(n, 0) + 1
+    best_niche = None
+    best_avg = -1
+    for n, total in niche_totals.items():
+        if niche_counts[n] < 3:
+            continue
+        avg = total / niche_counts[n]
+        if avg > best_avg:
+            best_avg = avg
+            best_niche = {"niche": n, "avg_score": round(avg, 1),
+                          "count": niche_counts[n]}
+
+    # (5) Pipeline value — sum of missed-money for HOT+ leads not yet contacted.
+    pipeline_low = 0
+    pipeline_high = 0
+    pipeline_count = 0
+    for l in annotated:
+        if l["_label"] not in ("HOT", "MONEY"):
+            continue
+        if (l.get("status") or "NEW") != "NEW":
+            continue
+        mm = mi.estimate_missed_money(l)
+        if mm.get("low"):
+            pipeline_low += mm["low"]
+            pipeline_high += mm["high"]
+            pipeline_count += 1
+
+    # (6) Blockers — config-level issues + daily cap.
+    blockers = list(mc.config_blockers(config))
+    sends_today = _count_sends_today()
+    cap_remaining = max(0, DAILY_SEND_CAP - sends_today)
+    if sends_today >= DAILY_SEND_CAP:
+        blockers.append(f"daily cap reached ({sends_today}/{DAILY_SEND_CAP})")
+
+    return {
+        "call_now": call_now,
+        "email_safe": email_safe,
+        "email_safe_count": len(email_safe),
+        "followup": followup,
+        "followup_count": len(followup),
+        "best_niche": best_niche,
+        "pipeline_low": pipeline_low,
+        "pipeline_high": pipeline_high,
+        "pipeline_count": pipeline_count,
+        "blockers": blockers,
+        "sends_today": sends_today,
+        "cap_remaining": cap_remaining,
+        "daily_cap": DAILY_SEND_CAP,
+        "deliverability": mc.deliverability_checklist(config),
     }

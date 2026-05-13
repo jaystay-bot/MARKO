@@ -194,10 +194,13 @@ def generate_script(lead, sender_name="Jay"):
 EMAIL_KINDS = ("intro", "followup", "breakup")
 
 
-def generate_email(lead, kind="intro", sender_name="Jay"):
+def generate_email(lead, kind="intro", sender_name="Jay", config=None):
     """Return {kind, subject, body} for one lead. Never auto-sends.
 
-    Falls back to safe generic copy when fields are missing.
+    Falls back to safe generic copy when fields are missing. When `config`
+    is supplied, appends the compliance footer (unsubscribe + physical
+    address) from config.unsubscribe_text / config.physical_address so
+    the rendered preview matches what would actually be sent.
     """
     if kind not in EMAIL_KINDS:
         kind = "intro"
@@ -257,7 +260,154 @@ def generate_email(lead, kind="intro", sender_name="Jay"):
             f"– {sender_name}"
         )
 
+    if config:
+        try:
+            from marko_compliance import append_compliance_footer
+            body = append_compliance_footer(
+                body,
+                unsubscribe_text=config.get("unsubscribe_text"),
+                physical_address=config.get("physical_address"),
+            )
+        except Exception:
+            pass
+
     return {"kind": kind, "subject": subject, "body": body}
+
+
+# ---------- N183: Voicemail Generator (15-second variant) ----------
+
+def generate_voicemail(lead, sender_name="Jay"):
+    """Short voicemail script for one lead. ~15 seconds when read aloud.
+
+    Pure function over existing fields. Uses owner first name when known,
+    one pain hook if available, ends with a soft callback CTA.
+    """
+    owner = _first_name(lead.get("owner"))
+    business = (lead.get("name") or "your business").strip()
+    pain = lead.get("pain_points") or []
+    if isinstance(pain, str):
+        pain = [pain]
+    hook = None
+    for tag in pain:
+        if tag in WEAKNESS_HOOK:
+            hook = WEAKNESS_HOOK[tag]
+            break
+
+    if owner:
+        line1 = f"Hey {owner}, this is {sender_name}."
+    else:
+        line1 = f"Hey, this is {sender_name}."
+    if hook:
+        line2 = f" Quick voicemail about {business} -- {hook}. I'll text you the details. Call back when you get a sec."
+    else:
+        line2 = f" Quick voicemail about {business}. I'll text you the details -- call back when you get a sec."
+    return line1 + line2
+
+
+# ---------- N191: Why They Buy ----------
+#
+# Niche -> recommended-service angle pairing. Maps loosely; only used as a
+# nudge, not a hard claim. UI always shows it as "recommended angle:" not "fact:".
+
+NICHE_FIT = {
+    "mover": ("BookerMove", "after-hours booking capture"),
+    "moving": ("BookerMove", "after-hours booking capture"),
+    "roofer": ("TalkBot", "storm-call triage"),
+    "roofing": ("TalkBot", "storm-call triage"),
+    "groomer": ("GroomerOS", "blade-length + per-job pricing"),
+    "grooming": ("GroomerOS", "blade-length + per-job pricing"),
+    "hvac": ("TalkBot", "missed-emergency-call recovery"),
+    "plumber": ("TalkBot", "missed-emergency-call recovery"),
+    "plumbing": ("TalkBot", "missed-emergency-call recovery"),
+    "med spa": ("TalkBot", "appointment-fill on slow days"),
+    "medspa": ("TalkBot", "appointment-fill on slow days"),
+    "detail": ("BookerMove", "repeat-detail reminder flow"),
+    "detailing": ("BookerMove", "repeat-detail reminder flow"),
+    "tow": ("TalkBot", "after-hours dispatch capture"),
+    "towing": ("TalkBot", "after-hours dispatch capture"),
+    "restaurant": ("TalkBot", "slow-day fill without discount platforms"),
+    "salon": ("TalkBot", "appointment-fill on slow days"),
+    "hair": ("TalkBot", "appointment-fill on slow days"),
+}
+
+# Common operator objections (one per niche cluster) -- for the proof angle.
+OBJECTION = {
+    "mover": "they think they 'always pick up' -- but ask about Saturday at 6pm",
+    "roofer": "they say 'storms are unpredictable' -- that's exactly why triage matters",
+    "groomer": "they're skeptical of software, anchor on per-job revenue lift",
+    "hvac": "they're loyal to their phone system, focus on after-hours leak",
+    "plumber": "they're loyal to their phone system, focus on after-hours leak",
+    "med spa": "they think discounts fill slots -- anchor on retention not discounting",
+    "detail": "they say 'we already text' -- anchor on no-show reduction",
+    "tow": "they think their dispatch is fine -- ask about peak nights",
+    "restaurant": "they think foot traffic is the lever -- anchor on Tuesday lunch fill",
+}
+
+
+def _niche_match(niche, table):
+    if not niche:
+        return None
+    nlow = niche.lower()
+    for key, value in table.items():
+        if key in nlow:
+            return value
+    return None
+
+
+def why_they_buy(lead):
+    """N191: structured buy-angle for one lead. Pure read.
+
+    Output keys:
+      - angle: one-line reason this lead would care
+      - primary_pain: the highest-impact pain tag (or None)
+      - recommended_service: which MARKO product fits or None
+      - service_reason: short phrase for why the service fits
+      - likely_objection: how they'll push back
+      - confidence: "low"/"med"/"high" based on signal density
+    """
+    pain = lead.get("pain_points") or []
+    if isinstance(pain, str):
+        pain = [pain]
+    niche = lead.get("niche") or ""
+
+    primary_pain = None
+    for tag in pain:
+        if tag in WEAKNESS_HOOK:
+            primary_pain = tag
+            break
+    if not primary_pain and pain:
+        primary_pain = pain[0]
+
+    fit = _niche_match(niche, NICHE_FIT)
+    service = fit[0] if fit else None
+    service_reason = fit[1] if fit else None
+    objection = _niche_match(niche, OBJECTION)
+
+    if primary_pain and service_reason:
+        angle = (f"Site shows {primary_pain}; that's the exact gap "
+                 f"{service or 'our offer'} closes via {service_reason}.")
+    elif primary_pain:
+        angle = f"Site shows {primary_pain} -- money is leaking out of that hole."
+    elif service_reason:
+        angle = f"Standard {niche or 'local'} weak spot: {service_reason}."
+    else:
+        angle = "No clear weakness from public signals; lead is borderline."
+
+    if len(pain) >= 3:
+        conf = "high"
+    elif len(pain) >= 1:
+        conf = "med"
+    else:
+        conf = "low"
+
+    return {
+        "angle": angle,
+        "primary_pain": primary_pain,
+        "recommended_service": service,
+        "service_reason": service_reason,
+        "likely_objection": objection,
+        "confidence": conf,
+    }
 
 
 # ---------- N098: Daily Brief ----------
