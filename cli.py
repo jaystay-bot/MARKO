@@ -22,6 +22,7 @@ Usage:
   python cli.py analyze
   python cli.py report
   python cli.py scrape <niche> <city> <state>
+  python cli.py enrich [--write]
   python cli.py --help
 """
 
@@ -74,6 +75,12 @@ def main():
             print("Usage: python cli.py scrape <niche> <city> <state>")
             return
         scraper.scrape(sys.argv[2], sys.argv[3], sys.argv[4])
+
+    elif cmd == "enrich":
+        # Backfill owner + pain_points for existing leads with a website but
+        # missing those fields. Defaults to dry-run; pass --write to persist.
+        import enrich_batch
+        enrich_batch.run(write="--write" in sys.argv)
 
     else:
         print(f"Unknown: {cmd}")

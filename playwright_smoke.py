@@ -134,9 +134,11 @@ def run_tests():
             # 12. no dead buttons -- click every visible <button> that does NOT have type=submit
             #     inside a form, and verify it triggers a navigation OR runs JS without console errors.
             #     Lighter: ensure copy-btn responds (synthetic check via JS click).
-            page.evaluate("document.querySelector('.copy-btn')?.click()")
+            # N083: dropped the "|| true" tautology — assertion now requires a
+            # real copy-btn element on the page AND the clipboard API to exist.
             check("12. no dead buttons (copy-btn click handler bound)",
-                  page.evaluate("typeof navigator.clipboard !== 'undefined' || true"))
+                  page.evaluate("document.querySelector('.copy-btn') !== null")
+                  and page.evaluate("typeof navigator.clipboard !== 'undefined'"))
 
             # 13. no auto-send -- /send is POST-only, GET should 405
             page.goto(BASE_URL + "/send", wait_until="domcontentloaded")
@@ -278,6 +280,38 @@ def run_tests():
             else:
                 check("30. brain-panel (no call cards in fixture, skipped)", True)
                 check("30b. brain-path (no call cards, skipped)", True)
+
+            # 31. N262: welcome banner partial renders identically post-extract.
+            #     Active campaigns in fixture => banner should appear.
+            wb_count = page.locator(".welcome").count()
+            check("31. welcome banner partial still renders",
+                  wb_count >= 1, f"got {wb_count} welcome blocks")
+
+            # 32. N262: perf snapshot — capture LCP-ish first-contentful-paint
+            #     timing and total document size. Not a Lighthouse audit, but a
+            #     concrete budget the next polish turn can compare against.
+            page.goto(BASE_URL + "/", wait_until="networkidle")
+            timing = page.evaluate("""() => {
+                const nav = performance.getEntriesByType('navigation')[0] || {};
+                const paint = performance.getEntriesByType('paint') || [];
+                const fcp = (paint.find(p => p.name === 'first-contentful-paint') || {}).startTime;
+                const lcp_entries = performance.getEntriesByType('largest-contentful-paint') || [];
+                const lcp = lcp_entries.length ? lcp_entries[lcp_entries.length - 1].startTime : null;
+                return {
+                    fcp_ms: fcp ? Math.round(fcp) : null,
+                    lcp_ms: lcp ? Math.round(lcp) : null,
+                    dom_loaded_ms: nav.domContentLoadedEventEnd ? Math.round(nav.domContentLoadedEventEnd) : null,
+                    load_ms: nav.loadEventEnd ? Math.round(nav.loadEventEnd) : null,
+                    transfer_kb: nav.transferSize ? Math.round(nav.transferSize / 1024) : null,
+                    decoded_kb: nav.decodedBodySize ? Math.round(nav.decodedBodySize / 1024) : null,
+                };
+            }""")
+            # Don't assert thresholds (perf varies by machine) — record them.
+            # Just ensure the metrics are sane (FCP under 5s on localhost).
+            fcp = timing.get("fcp_ms") or 0
+            check(f"32. FCP under 5000ms on localhost (got {fcp}ms)",
+                  fcp < 5000, f"timing={timing}")
+            print(f"     perf snapshot: {timing}")
 
         finally:
             browser.close()

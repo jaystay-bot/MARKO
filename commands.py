@@ -1120,10 +1120,12 @@ def money_mode(sender_name="Jay"):
     email_safe.sort(key=lambda l: l["_score"], reverse=True)
     email_safe = email_safe[:10]
 
-    # (3) Follow-up needed — contacted/called/emailed leads whose last_attempt_at
-    #     is older than the follow-up window.
+    # (3) Follow-up needed — leads whose last_attempt_at is older than the
+    #     follow-up window. N083: removed "EMAILED" — no code path ever
+    #     assigns that status, so it was a ghost. CONTACTED is the canonical
+    #     post-send status (set by marko_send).
     cutoff = datetime.now() - timedelta(hours=FOLLOWUP_OVERDUE_HOURS)
-    followup_statuses = {"CONTACTED", "CALLED", "EMAILED", "CALLBACK", "INTERESTED"}
+    followup_statuses = {"CONTACTED", "CALLED", "CALLBACK", "INTERESTED"}
     followup = []
     for l in annotated:
         s = (l.get("status") or "").upper()

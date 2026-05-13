@@ -1,0 +1,26 @@
+{# N262: Welcome-back banner. Renders only when resume_state is truthy
+   (i.e. the dashboard has an ACTIVE campaign or a top HOT lead to call).
+   Inputs: resume_state (bool), active_campaign (dict or None),
+   top_hot (lead dict or None). #}
+{% if resume_state %}
+<div class="welcome">
+    <div>
+        <div class="resume-title">Welcome back</div>
+        <div class="resume-line">
+            {% if active_campaign %}Active campaign: <strong>{{ active_campaign.name }}</strong> <span class="pill">{{ active_campaign.id }}</span>{% endif %}
+            {% if active_campaign and top_hot %} · {% endif %}
+            {% if top_hot %}Next call: <strong>{{ top_hot.name }}</strong> <span class="score-badge score-{{ top_hot._label }}" style="margin-left:4px;">{{ top_hot._label }} {{ top_hot._score }}</span>{% endif %}
+        </div>
+    </div>
+    {% if top_hot %}
+    <div class="row">
+        <span class="phone" style="font-family:ui-monospace,Menlo,monospace;">{{ top_hot.phone }}</span>
+        <button type="button" class="btn muted copy-btn" data-copy="{{ top_hot.phone }}" title="Copy phone">⧉</button>
+        <a class="btn" href="#callfirst">Open Call First →</a>
+        <form action="/lead/{{ top_hot.id }}/called" method="post" class="inline">
+            <button type="submit" class="btn muted">Mark CALLED</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endif %}

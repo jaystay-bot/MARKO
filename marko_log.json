@@ -232,6 +232,28 @@
       "lead_id": "L004",
       "status": "CLOSED_LOST",
       "mrr_value": 0
+    },
+    {
+      "timestamp": "2026-05-12T22:23:57.596503",
+      "action": "sequence_event",
+      "lead_id": "L001",
+      "event": "email_sent",
+      "step": 2,
+      "done": false
+    },
+    {
+      "timestamp": "2026-05-12T22:23:57.624511",
+      "action": "lead_status",
+      "lead_id": "L001",
+      "status": "BOOKED"
+    },
+    {
+      "timestamp": "2026-05-12T22:23:57.649514",
+      "action": "sequence_event",
+      "lead_id": "L001",
+      "event": "booked",
+      "step": 2,
+      "done": true
     }
   ]
 }
