@@ -99,11 +99,32 @@ def _write_json_local(path, data):
 KV_NAMESPACE = "marko"
 
 
+def _kv_url():
+    # Vercel's Upstash Marketplace integration prefixes injected env vars
+    # with the database alias (e.g. MARKO_KV_REST_API_URL). Prefer the
+    # unprefixed name when it looks like a real URL; otherwise fall back
+    # to the MARKO_ prefix. A non-URL value (e.g. placeholder description
+    # text) is treated as missing.
+    for k in ("KV_REST_API_URL", "MARKO_KV_REST_API_URL"):
+        v = (os.environ.get(k) or "").strip()
+        if v.startswith(("http://", "https://")):
+            return v
+    return ""
+
+
+def _kv_token():
+    for k in ("KV_REST_API_TOKEN", "MARKO_KV_REST_API_TOKEN"):
+        v = (os.environ.get(k) or "").strip()
+        # Real Upstash tokens are long opaque strings; reject obvious
+        # placeholder text by requiring no whitespace and >=20 chars.
+        if v and " " not in v and len(v) >= 20:
+            return v
+    return ""
+
+
 def _kv_configured():
-    """Both creds present + non-blank? Returns bool."""
-    url = os.environ.get("KV_REST_API_URL")
-    token = os.environ.get("KV_REST_API_TOKEN")
-    return bool((url or "").strip()) and bool((token or "").strip())
+    """Both creds present + look real? Returns bool."""
+    return bool(_kv_url()) and bool(_kv_token())
 
 
 def _kv_key_from_path(path):
@@ -122,10 +143,7 @@ def _kv_creds_or_raise():
             "not set. Provision Upstash Redis via Vercel Marketplace; both "
             "env vars are then auto-injected into the project."
         )
-    return (
-        os.environ["KV_REST_API_URL"].rstrip("/"),
-        os.environ["KV_REST_API_TOKEN"],
-    )
+    return (_kv_url().rstrip("/"), _kv_token())
 
 
 def _kv_request(method, url, token, body=None):
@@ -196,6 +214,6 @@ def backend_info():
         "on_vercel": _on_vercel(),
         "persistent": is_persistent(),
         "kv_configured": _kv_configured(),
-        "kv_url_set": bool((os.environ.get("KV_REST_API_URL") or "").strip()),
-        "kv_token_set": bool((os.environ.get("KV_REST_API_TOKEN") or "").strip()),
+        "kv_url_set": bool(_kv_url()),
+        "kv_token_set": bool(_kv_token()),
     }

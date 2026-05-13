@@ -1097,6 +1097,53 @@ def mobile_lead(lead_id):
                            page_title=f"Call — {lead.get('name', lead_id)}")
 
 
+@app.route("/__diag")
+def __diag():
+    info = storage.backend_info()
+    counts = {}
+    for fname in ("campaigns.json", "leads.json", "config.json",
+                  "templates.json", "marko_log.json"):
+        path = os.path.join(BASE_DIR, fname)
+        try:
+            doc = storage.read_json(path)
+            if isinstance(doc, dict):
+                first_list = next((v for v in doc.values() if isinstance(v, list)), None)
+                counts[fname] = len(first_list) if first_list is not None else len(doc)
+            elif isinstance(doc, list):
+                counts[fname] = len(doc)
+            else:
+                counts[fname] = "ok"
+        except FileNotFoundError:
+            counts[fname] = "missing"
+        except Exception as exc:
+            counts[fname] = f"err: {type(exc).__name__}"
+    return jsonify({"backend": info, "counts": counts})
+
+
+@app.route("/__seed_kv", methods=["POST"])
+def __seed_kv():
+    # One-shot bootstrap: copy bundled JSON files into Upstash KV so the
+    # first reads after STORAGE_BACKEND=kv don't crash. Gated by a secret
+    # env var; remove STORAGE_SEED_TOKEN from the project after seeding.
+    expected = (os.environ.get("STORAGE_SEED_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected or provided != expected:
+        return "forbidden", 403
+    seeded, failed = [], []
+    for fname in ("campaigns.json", "leads.json", "config.json",
+                  "templates.json", "marko_log.json"):
+        path = os.path.join(BASE_DIR, fname)
+        try:
+            with open(path, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+            storage.write_json(path, data)
+            seeded.append(fname)
+        except Exception as exc:
+            failed.append(f"{fname}: {exc}")
+    body = {"backend": storage.backend_info(), "seeded": seeded, "failed": failed}
+    return jsonify(body), (200 if not failed else 500)
+
+
 if __name__ == "__main__":
     print("MARKO Dashboard: http://127.0.0.1:5000")
     app.run(host="0.0.0.0", port=5000)
