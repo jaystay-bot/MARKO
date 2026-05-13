@@ -276,6 +276,60 @@
                 </div>
             </div>
             {% endif %}
+
+            <details class="compliance-editor" {% if compliance.config_blockers %}open{% endif %} style="margin-bottom:12px;">
+                <summary style="cursor:pointer; color:var(--accent); font-weight:600; font-size:13px; padding:6px 0;">
+                    Compliance settings {% if compliance.config_blockers %}— click to fill missing fields{% else %}— click to review or update{% endif %}
+                </summary>
+                <form action="/config/compliance" method="post" style="background:var(--panel2); border:1px solid var(--border); border-radius:6px; padding:14px; margin-top:8px; display:flex; flex-direction:column; gap:10px;">
+                    <p style="margin:0; color:var(--muted); font-size:12px;">
+                        Saved fields back to <code>config.json</code>. <strong>SMTP credentials are read from <code>MARKO_SMTP_EMAIL</code> / <code>MARKO_SMTP_PASSWORD</code> env vars, never from here.</strong> Real sends stay blocked until every required field is filled.
+                    </p>
+                    <div class="row" style="gap:12px;">
+                        <div class="grow" style="min-width:240px;">
+                            <label style="display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em;">Sender name <span style="color:var(--danger);">*</span></label>
+                            <input type="text" name="sender_name" value="{{ compliance_config.get('sender_name','') }}" placeholder="Jay" style="width:100%;" required>
+                        </div>
+                        <div class="grow" style="min-width:240px;">
+                            <label style="display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em;">From email <span style="color:var(--danger);">*</span></label>
+                            <input type="email" name="from_email" value="{{ compliance_config.get('from_email','') }}" placeholder="jay@yourdomain.com" style="width:100%;" required>
+                        </div>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em;">Unsubscribe text <span style="color:var(--danger);">*</span></label>
+                        <textarea name="unsubscribe_text" placeholder="If you'd rather not hear from me, reply 'stop' and I'll take you off the list." style="min-height:60px;" required>{{ compliance_config.get('unsubscribe_text','') }}</textarea>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em;">Physical postal address <span style="color:var(--danger);">*</span></label>
+                        <textarea name="physical_address" placeholder="123 Main St, Richmond, VA 23220" style="min-height:60px;" required>{{ compliance_config.get('physical_address','') }}</textarea>
+                        <small style="color:var(--muted); font-size:11px;">CAN-SPAM requires a real postal address on commercial email.</small>
+                    </div>
+                    <div>
+                        <label style="display:block; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em;">Stop-contact list (one email or phone per line)</label>
+                        <textarea name="stop_contact_list" placeholder="reply-with-stop@example.com&#10;804-555-0123" style="min-height:60px;">{% for entry in (compliance_config.get('stop_contact_list') or []) %}{{ entry }}
+{% endfor %}</textarea>
+                        <small style="color:var(--muted); font-size:11px;">Any lead matching by email or phone is excluded from every send.</small>
+                    </div>
+                    <fieldset style="border:1px solid var(--border); border-radius:4px; padding:8px 12px; display:flex; flex-wrap:wrap; gap:14px;">
+                        <legend style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; padding:0 6px;">Deliverability acknowledgements</legend>
+                        {% set deliv = compliance_config.get('deliverability') or {} %}
+                        <label style="display:flex; align-items:center; gap:6px; font-size:12px;">
+                            <input type="checkbox" name="spf_ok" value="1" {% if deliv.get('spf_ok') %}checked{% endif %}> SPF record published
+                        </label>
+                        <label style="display:flex; align-items:center; gap:6px; font-size:12px;">
+                            <input type="checkbox" name="dkim_ok" value="1" {% if deliv.get('dkim_ok') %}checked{% endif %}> DKIM signing enabled
+                        </label>
+                        <label style="display:flex; align-items:center; gap:6px; font-size:12px;">
+                            <input type="checkbox" name="dmarc_ok" value="1" {% if deliv.get('dmarc_ok') %}checked{% endif %}> DMARC policy published
+                        </label>
+                    </fieldset>
+                    <div class="row" style="gap:8px;">
+                        <button type="submit">Save compliance config</button>
+                        <span style="color:var(--muted); font-size:11px;">Fields marked <span style="color:var(--danger);">*</span> are required to unlock real sends.</span>
+                    </div>
+                </form>
+            </details>
+
             <div class="money-grid">
                 <div class="money-card">
                     <div class="mc-title">Call these first</div>

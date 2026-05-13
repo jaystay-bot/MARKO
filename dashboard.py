@@ -127,6 +127,7 @@ def index():
         money_mode=money_mode_data,
         pipeline=pipeline,
         compliance=compliance_state,
+        compliance_config=config_for_view,
         lead_statuses=commands.LEAD_STATUSES,
         max_retries=commands.MAX_RETRIES,
         daily_cap=commands.DAILY_SEND_CAP,
@@ -285,6 +286,43 @@ def api_compliance():
         "stop_list_size": len(cfg.get("stop_contact_list") or []),
         "no_contact_statuses": sorted(marko_compliance.NO_CONTACT_STATUSES),
     })
+
+
+@app.route("/config/compliance", methods=["POST"])
+def config_compliance():
+    """N122: in-UI editor for compliance config fields.
+
+    Operator fills sender_name / from_email / unsubscribe_text /
+    physical_address / stop_contact_list / SPF-DKIM-DMARC ack flags
+    without leaving the dashboard. commands.save_config enforces a
+    whitelist so smtp, email_template, batch_size stay untouched.
+    """
+    form = request.form
+    stop_raw = (form.get("stop_contact_list") or "").strip()
+    stop_list = [line.strip() for line in stop_raw.splitlines() if line.strip()]
+
+    updates = {
+        "sender_name": (form.get("sender_name") or "").strip(),
+        "from_email": (form.get("from_email") or "").strip(),
+        "unsubscribe_text": (form.get("unsubscribe_text") or "").strip(),
+        "physical_address": (form.get("physical_address") or "").strip(),
+        "stop_contact_list": stop_list,
+        "deliverability": {
+            "spf_ok": form.get("spf_ok") == "1",
+            "dkim_ok": form.get("dkim_ok") == "1",
+            "dmarc_ok": form.get("dmarc_ok") == "1",
+        },
+    }
+    commands.save_config(updates)
+
+    cfg = commands.get_config()
+    blockers = marko_compliance.config_blockers(cfg)
+    if blockers:
+        msg = ("Compliance config saved. Still missing: "
+               + "; ".join(b.replace("config.", "") for b in blockers))
+    else:
+        msg = "Compliance config saved. All blockers cleared — real sends now allowed."
+    return redirect(url_for("index", message=msg))
 
 
 @app.route("/lead/<lead_id>/intel")

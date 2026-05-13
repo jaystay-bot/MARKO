@@ -60,6 +60,52 @@ def get_config():
     return load_json(CONFIG_FILE)
 
 
+# Fields that the in-dashboard compliance editor (N122) is allowed to write.
+# Anything outside this set (smtp, email_template, batch_size, etc.) is left
+# untouched so a malicious POST can't clobber sensitive sections.
+CONFIG_EDITABLE_TOP = {
+    "sender_name", "from_email", "unsubscribe_text",
+    "physical_address", "stop_contact_list",
+}
+CONFIG_EDITABLE_DELIVERABILITY = {"spf_ok", "dkim_ok", "dmarc_ok"}
+
+
+def save_config(updates):
+    """Update whitelisted compliance fields in config.json.
+
+    Refuses to touch anything outside CONFIG_EDITABLE_TOP /
+    CONFIG_EDITABLE_DELIVERABILITY so SMTP credentials, batch size, and the
+    canonical email template stay safe. This is an intentional config mutation:
+    it saves config.json and appends a config_update audit entry. Returns the
+    merged config.
+    """
+    if not isinstance(updates, dict):
+        raise TypeError("save_config: updates must be a dict")
+
+    cfg = get_config() if os.path.exists(CONFIG_FILE) else {}
+    changed = []
+
+    for key, value in updates.items():
+        if key in CONFIG_EDITABLE_TOP:
+            cfg[key] = value
+            changed.append(key)
+        elif key == "deliverability" and isinstance(value, dict):
+            current = cfg.get("deliverability") or {}
+            for sub_key, sub_value in value.items():
+                if sub_key in CONFIG_EDITABLE_DELIVERABILITY:
+                    current[sub_key] = bool(sub_value)
+                    changed.append(f"deliverability.{sub_key}")
+            cfg["deliverability"] = current
+
+    save_json(CONFIG_FILE, cfg)
+    log_action({
+        "action": "config_update",
+        "scope": "compliance",
+        "fields": sorted(set(changed)),
+    })
+    return cfg
+
+
 def get_smtp_credentials():
     """Get SMTP credentials from environment variables."""
     email = os.environ.get("MARKO_SMTP_EMAIL")
