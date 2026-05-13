@@ -622,6 +622,34 @@
                     <ul class="mc-list"><li>Nothing in-flight is overdue. Start a new send to begin a sequence.</li></ul>
                     {% endif %}
                 </div>
+
+                <div class="money-card">
+                    <div class="mc-title">Pending sends (review queue)</div>
+                    {% if pending_count %}
+                    <div class="mc-big" style="color:var(--accent);">{{ pending_count }}</div>
+                    <ul class="mc-list">
+                        {% for p in pending_queue[:5] %}
+                        <li>{{ (p.name or p.id)|truncate(28) }} — <em>{{ p.kind }}</em>{% if p.blockers %} ⚠{% endif %}</li>
+                        {% endfor %}
+                        {% if pending_queue|length > 5 %}<li style="color:var(--muted);">+{{ pending_queue|length - 5 }} more…</li>{% endif %}
+                    </ul>
+                    <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                        <form action="/sequence/send_all_pending" method="post" style="margin:0;" onsubmit="return confirm('Send {{ pending_count }} email(s) now? Compliance + daily cap will be enforced.');">
+                            <button type="submit" style="font-size:11px;">📤 Send all</button>
+                        </form>
+                        <form action="/sequence/send_all_pending" method="post" style="margin:0;">
+                            <input type="hidden" name="dry_run" value="1">
+                            <button type="submit" class="muted" style="font-size:11px;">Dry-run all</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <div class="mc-big">✓ empty</div>
+                    <ul class="mc-list"><li>Nothing staged. Click "Stage all" to auto-prep follow-ups for any step-4 or step-5 sequences that are due.</li></ul>
+                    <form action="/sequence/stage_all" method="post" style="margin-top:6px;">
+                        <button type="submit" style="font-size:11px;">⚙ Stage all due follow-ups</button>
+                    </form>
+                    {% endif %}
+                </div>
                 <div class="money-card">
                     <div class="mc-title">Blockers before sending</div>
                     {% if money_mode.blockers %}
@@ -791,7 +819,31 @@
                 <details style="margin-top:6px; background:var(--panel); border-radius:4px; padding:6px 10px;">
                     
                 <details style="margin-top:6px; background:var(--panel); border-radius:4px; padding:6px 10px;">
-                    <summary style="cursor:pointer; color:var(--muted); font-size:11px;">Sequence: log a step</summary>
+                    
+                {% if l.pending_send %}
+                <details class="pending-preview" open style="margin-top:6px; background:#0a3a26; border-left:3px solid var(--accent); border-radius:4px; padding:8px 12px;">
+                    <summary style="cursor:pointer; color:var(--accent); font-weight:600; font-size:12px;">📤 Pending {{ l.pending_send.kind }} — review and send</summary>
+                    <div style="margin-top:6px; font-size:12px;">
+                        <div style="color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:0.06em;">Subject</div>
+                        <div style="font-weight:600;">{{ l.pending_send.subject }}</div>
+                        <div style="color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:0.06em; margin-top:6px;">Body preview</div>
+                        <pre style="white-space:pre-wrap; margin:0; padding:6px; background:var(--panel); border-radius:4px; max-height:140px; overflow:auto; font-family:inherit; font-size:12px;">{{ l.pending_send.body }}</pre>
+                        <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
+                            <form action="/lead/{{ l.id }}/sequence/send_pending" method="post" style="margin:0;" onsubmit="return confirm('Send this {{ l.pending_send.kind }} to {{ l.email }} now?');">
+                                <button type="submit" style="font-size:11px;">📤 Send now</button>
+                            </form>
+                            <form action="/lead/{{ l.id }}/sequence/send_pending" method="post" style="margin:0;">
+                                <input type="hidden" name="dry_run" value="1">
+                                <button type="submit" class="muted" style="font-size:11px;">Dry-run</button>
+                            </form>
+                            <form action="/lead/{{ l.id }}/sequence/discard" method="post" style="margin:0;">
+                                <button type="submit" class="muted" style="font-size:11px;">Skip this round</button>
+                            </form>
+                        </div>
+                    </div>
+                </details>
+                {% endif %}
+<summary style="cursor:pointer; color:var(--muted); font-size:11px;">Sequence: log a step</summary>
                     <div class="seq-actions">
                         <form action="/lead/{{ l.id }}/sequence/email_sent" method="post"><button class="btn muted" type="submit">📨 Email sent</button></form>
                         <form action="/lead/{{ l.id }}/sequence/voicemail" method="post"><button class="btn muted" type="submit">📞 Voicemail left</button></form>

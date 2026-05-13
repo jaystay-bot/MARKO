@@ -190,6 +190,8 @@ def index():
         compliance_config=config_for_view,
         cashflow=cashflow,        sequence_due=commands.sequence_due_now(limit=10),
         sequence_due_count=commands.sequence_due_count(),
+        pending_queue=commands.pending_send_queue(),
+        pending_count=commands.pending_send_count(),
 
         lead_statuses=commands.LEAD_STATUSES,
         max_retries=commands.MAX_RETRIES,
@@ -346,8 +348,8 @@ def lead_stop(lead_id):
             l["status"] = "DNC"
             l["do_not_contact"] = True
             l["last_attempt_at"] = __import__("datetime").datetime.now().isoformat()
-            with open(LEADS_FILE, "w") as f:
-                json.dump(data, f, indent=2)
+            # N083: route through commands.save_json so the write is atomic.
+            commands.save_json(LEADS_FILE, data)
             commands.log_action({"action": "lead_status", "lead_id": lead_id,
                                  "status": "DNC", "reason": "stop_button"})
             return redirect(url_for("index", message=f"Lead {lead_id} marked DO_NOT_CONTACT"))
@@ -475,6 +477,63 @@ def api_sequence_due():
             for d in due
         ],
     })
+
+
+
+
+@app.route("/sequence/stage_all", methods=["POST"])
+def sequence_stage_all():
+    """N127: stage every eligible follow-up / final bump email for review."""
+    count = commands.stage_all_pending_sends()
+    msg = (f"Staged {count} pending send(s) — review the queue and click Send."
+           if count else "No leads currently eligible for auto-staging.")
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/lead/<lead_id>/sequence/stage", methods=["POST"])
+def lead_sequence_stage(lead_id):
+    """N127: stage one lead's pending email."""
+    ok = commands.stage_pending_send(lead_id)
+    msg = (f"Lead {lead_id} pending send staged"
+           if ok else
+           f"Lead {lead_id} not eligible (wrong step / no email / already staged)")
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/lead/<lead_id>/sequence/send_pending", methods=["POST"])
+def lead_sequence_send_pending(lead_id):
+    """N127: send one staged email."""
+    dry = request.form.get("dry_run") == "1"
+    ok, info = commands.send_pending(lead_id, dry_run=dry)
+    prefix = "DRY: " if dry and ok else ""
+    return redirect(url_for("index", message=prefix + (info or "")))
+
+
+@app.route("/lead/<lead_id>/sequence/discard", methods=["POST"])
+def lead_sequence_discard(lead_id):
+    """N127: skip this round — drop the staged email without sending."""
+    ok = commands.discard_pending(lead_id)
+    msg = (f"Lead {lead_id} pending send discarded"
+           if ok else f"Lead {lead_id} had no pending send")
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/sequence/send_all_pending", methods=["POST"])
+def sequence_send_all_pending():
+    """N127: send the entire pending review queue (compliance + cap enforced)."""
+    dry = request.form.get("dry_run") == "1"
+    result = commands.send_all_pending(dry_run=dry)
+    parts = [f"sent {result['sent']}"]
+    if result["failed"]:
+        parts.append(f"failed {result['failed']}")
+    if result["skipped"]:
+        parts.append(f"skipped {result['skipped']}")
+    msg = ("DRY: " if dry else "") + " · ".join(parts)
+    if result["errors"]:
+        msg += " · " + result["errors"][0]
+        if len(result["errors"]) > 1:
+            msg += f" (+{len(result['errors']) - 1} more)"
+    return redirect(url_for("index", message=msg))
 
 
 @app.route("/api/compliance")

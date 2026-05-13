@@ -55,8 +55,17 @@ def load_json(filepath):
 
 
 def save_json(filepath, data):
-    with open(filepath, "w") as f:
+    """Atomic JSON write.
+
+    N083: write to <filepath>.tmp first, then os.replace() into place.
+    os.replace is atomic on POSIX and Windows (Python >=3.3), so a crash
+    or process kill mid-write cannot leave a partially written file —
+    readers either see the old version or the new version, never garbage.
+    """
+    tmp_path = filepath + ".tmp"
+    with open(tmp_path, "w") as f:
         json.dump(data, f, indent=2)
+    os.replace(tmp_path, filepath)
 
 
 def get_config():
@@ -1372,3 +1381,290 @@ def sequence_due_now(limit=10):
     import marko_sequence as ms
     leads = load_json(LEADS_FILE).get("leads", [])
     return ms.due_now(leads, limit=limit)
+
+
+# ---------- N127: Auto-stage pending sends (follow-up + final bump) ----------
+#
+# When a sequence lands at step 4 or 5 with next_at <= now, the lead becomes
+# eligible to "stage" — we generate the personalized email body and stash it
+# on the lead as `pending_send`. Jay then reviews and clicks Send (or Send
+# All), at which point the email actually fires through SMTP and the
+# sequence advances. Compliance + daily cap are enforced on every send.
+
+PENDING_KIND_BY_STEP = {
+    4: "followup",   # step 4 -> follow-up email
+    5: "breakup",    # step 5 -> final bump (matches marko_intel kind)
+}
+PENDING_EVENT_BY_STEP = {
+    4: "followup_sent",
+    5: "final_bump_sent",
+}
+
+
+def _is_pending_eligible(lead, now=None):
+    """Step 4 or 5, not done, next_at past, has email, no pending_send yet."""
+    import marko_sequence as ms
+    if now is None:
+        now = datetime.now()
+    if lead.get("sequence_done"):
+        return False
+    if not lead.get("email"):
+        return False
+    if lead.get("pending_send"):
+        return False
+    step = int(lead.get("sequence_step") or 0)
+    if step not in (ms.STEP_FOLLOWUP_DUE, ms.STEP_FINAL_BUMP_DUE):
+        return False
+    next_at = ms._parse_iso(lead.get("sequence_next_at"))
+    if next_at and next_at > now:
+        return False
+    return True
+
+
+def stage_pending_send(lead_id, sender_name=None):
+    """Generate and stash a pending_send on one lead. Returns True on success."""
+    import marko_intel as mi
+    data = load_json(LEADS_FILE)
+    config = get_config() if os.path.exists(CONFIG_FILE) else {}
+    if sender_name is None:
+        sender_name = config.get("sender_name", "Jay")
+    for l in data.get("leads", []):
+        if l.get("id") != lead_id:
+            continue
+        if not _is_pending_eligible(l):
+            return False
+        step = int(l.get("sequence_step") or 0)
+        kind = PENDING_KIND_BY_STEP.get(step, "followup")
+        email = mi.generate_email(l, kind=kind, sender_name=sender_name, config=config)
+        l["pending_send"] = {
+            "kind":       kind,
+            "step":       step,
+            "subject":    email.get("subject", ""),
+            "body":       email.get("body", ""),
+            "queued_at":  datetime.now().isoformat(),
+        }
+        save_json(LEADS_FILE, data)
+        log_action({
+            "action":  "pending_send_staged",
+            "lead_id": lead_id,
+            "kind":    kind,
+            "step":    step,
+        })
+        return True
+    return False
+
+
+def stage_all_pending_sends():
+    """Stage every currently-eligible lead. Returns the count newly staged."""
+    import marko_intel as mi
+    data = load_json(LEADS_FILE)
+    config = get_config() if os.path.exists(CONFIG_FILE) else {}
+    sender_name = config.get("sender_name", "Jay")
+    staged = 0
+    for l in data.get("leads", []):
+        if not _is_pending_eligible(l):
+            continue
+        step = int(l.get("sequence_step") or 0)
+        kind = PENDING_KIND_BY_STEP.get(step, "followup")
+        email = mi.generate_email(l, kind=kind, sender_name=sender_name, config=config)
+        l["pending_send"] = {
+            "kind":      kind,
+            "step":      step,
+            "subject":   email.get("subject", ""),
+            "body":      email.get("body", ""),
+            "queued_at": datetime.now().isoformat(),
+        }
+        staged += 1
+    if staged:
+        save_json(LEADS_FILE, data)
+        log_action({"action": "pending_send_staged_batch", "count": staged})
+    return staged
+
+
+def pending_send_queue():
+    """Return list of leads currently carrying a pending_send, with the
+    stashed subject/body and the compliance verdict for the operator.
+    Pure read; no writes."""
+    import marko_compliance as mc
+    leads = load_json(LEADS_FILE).get("leads", [])
+    config = get_config() if os.path.exists(CONFIG_FILE) else {}
+    stop_list = config.get("stop_contact_list") or []
+    out = []
+    for l in leads:
+        ps = l.get("pending_send")
+        if not ps:
+            continue
+        per_lead_blockers = mc.lead_blockers(l, stop_list=stop_list)
+        out.append({
+            "id":         l.get("id"),
+            "name":       l.get("name"),
+            "email":      l.get("email"),
+            "city":       l.get("city"),
+            "niche":      l.get("niche"),
+            "kind":       ps.get("kind"),
+            "step":       ps.get("step"),
+            "subject":    ps.get("subject"),
+            "body":       ps.get("body"),
+            "queued_at":  ps.get("queued_at"),
+            "blockers":   per_lead_blockers,
+        })
+    out.sort(key=lambda x: x.get("queued_at") or "")
+    return out
+
+
+def pending_send_count():
+    return len(pending_send_queue())
+
+
+def _send_one_pending_record(lead, config, smtp_email, smtp_password):
+    """Actually fire one pending_send via SMTP. Returns (ok, error)."""
+    import marko_compliance as mc
+    ps = lead.get("pending_send") or {}
+    subject = ps.get("subject") or ""
+    body = ps.get("body") or ""
+    if not subject or not body:
+        return False, "pending_send missing subject/body"
+    # Per-lead compliance check (config-level already verified by caller).
+    stop_list = (config or {}).get("stop_contact_list") or []
+    blockers = mc.lead_blockers(lead, stop_list=stop_list)
+    if blockers:
+        return False, "; ".join(blockers)
+    smtp_cfg = (config or {}).get("smtp", {})
+    success, error, _smtp_code = send_email(
+        smtp_cfg, smtp_email, smtp_password,
+        lead.get("email"), subject, body,
+    )
+    return success, error
+
+
+def send_pending(lead_id, dry_run=False):
+    """Send one pending_send email and advance the sequence.
+
+    Refuses on config compliance gaps unless dry_run=True. Daily cap is
+    enforced. On a successful real send, clears pending_send and fires
+    the followup_sent or final_bump_sent sequence event.
+    """
+    import marko_compliance as mc
+    import marko_sequence as ms
+
+    config = get_config() if os.path.exists(CONFIG_FILE) else {}
+    config_blockers = mc.config_blockers(config)
+    if not dry_run and config_blockers:
+        return False, "BLOCKED: " + "; ".join(config_blockers)
+
+    smtp_email, smtp_password = (None, None)
+    if not dry_run:
+        smtp_email, smtp_password = get_smtp_credentials()
+        if not smtp_email or not smtp_password:
+            return False, ("ERROR: SMTP credentials not configured "
+                           "(set MARKO_SMTP_EMAIL / MARKO_SMTP_PASSWORD).")
+        if _count_sends_today() >= DAILY_SEND_CAP:
+            return False, f"BLOCKED: daily cap {DAILY_SEND_CAP} reached."
+
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") != lead_id:
+            continue
+        ps = l.get("pending_send")
+        if not ps:
+            return False, f"Lead {lead_id} has no pending send"
+        if dry_run:
+            log_action({"action": "send", "lead_id": lead_id,
+                        "status": "dry-run", "kind": ps.get("kind")})
+            return True, "dry-run OK"
+        ok, error = _send_one_pending_record(l, config, smtp_email, smtp_password)
+        if not ok:
+            log_action({"action": "send", "lead_id": lead_id,
+                        "status": "failed", "kind": ps.get("kind"),
+                        "error": error})
+            return False, error or "send failed"
+        # Success: clear pending, advance sequence, persist.
+        step = int(ps.get("step") or 0)
+        event = PENDING_EVENT_BY_STEP.get(step, "followup_sent")
+        l.pop("pending_send", None)
+        seq_updates = ms.advance_for_event(l, event)
+        l.update(seq_updates)
+        l["last_attempt_at"] = datetime.now().isoformat()
+        save_json(LEADS_FILE, data)
+        log_action({"action": "send", "lead_id": lead_id,
+                    "status": "sent", "kind": ps.get("kind"),
+                    "sequence_event": event})
+        return True, f"Sent {ps.get('kind')} to {lead_id}"
+    return False, f"Lead {lead_id} not found"
+
+
+def send_all_pending(dry_run=False):
+    """Send every queued pending_send respecting compliance + daily cap.
+
+    Returns dict {sent, failed, skipped, errors: [...], remaining_cap}.
+    """
+    import marko_compliance as mc
+
+    config = get_config() if os.path.exists(CONFIG_FILE) else {}
+    config_blockers = mc.config_blockers(config)
+    if not dry_run and config_blockers:
+        return {"sent": 0, "failed": 0, "skipped": 0,
+                "errors": ["BLOCKED: " + "; ".join(config_blockers)],
+                "remaining_cap": 0}
+
+    smtp_email = smtp_password = None
+    if not dry_run:
+        smtp_email, smtp_password = get_smtp_credentials()
+        if not smtp_email or not smtp_password:
+            return {"sent": 0, "failed": 0, "skipped": 0,
+                    "errors": ["ERROR: SMTP credentials not configured"],
+                    "remaining_cap": 0}
+
+    data = load_json(LEADS_FILE)
+    queue = [l for l in data.get("leads", []) if l.get("pending_send")]
+
+    sent = failed = skipped = 0
+    errors = []
+    cap_remaining = max(0, DAILY_SEND_CAP - _count_sends_today())
+
+    for l in queue:
+        if not dry_run and cap_remaining <= 0:
+            skipped += 1
+            errors.append(f"{l.get('id')}: daily cap reached")
+            continue
+        if dry_run:
+            sent += 1
+            continue
+        ok, error = _send_one_pending_record(l, config, smtp_email, smtp_password)
+        if ok:
+            import marko_sequence as ms
+            ps = l.get("pending_send") or {}
+            step = int(ps.get("step") or 0)
+            event = PENDING_EVENT_BY_STEP.get(step, "followup_sent")
+            l.pop("pending_send", None)
+            l.update(ms.advance_for_event(l, event))
+            l["last_attempt_at"] = datetime.now().isoformat()
+            log_action({"action": "send", "lead_id": l.get("id"),
+                        "status": "sent", "kind": ps.get("kind"),
+                        "sequence_event": event})
+            sent += 1
+            cap_remaining -= 1
+        else:
+            failed += 1
+            errors.append(f"{l.get('id')}: {error}")
+            log_action({"action": "send", "lead_id": l.get("id"),
+                        "status": "failed", "error": error})
+
+    if sent or failed:
+        save_json(LEADS_FILE, data)
+    return {"sent": sent, "failed": failed, "skipped": skipped,
+            "errors": errors, "remaining_cap": cap_remaining}
+
+
+def discard_pending(lead_id):
+    """Skip this round — drop the staged pending_send without sending."""
+    data = load_json(LEADS_FILE)
+    for l in data.get("leads", []):
+        if l.get("id") == lead_id and l.get("pending_send"):
+            kind = l["pending_send"].get("kind")
+            l.pop("pending_send", None)
+            save_json(LEADS_FILE, data)
+            log_action({"action": "pending_send_discarded",
+                        "lead_id": lead_id, "kind": kind})
+            return True
+    return False
