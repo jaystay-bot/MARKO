@@ -842,6 +842,92 @@ def test_set_lead_disposition_safety():
               not ok_missing)
 
 
+def test_marko_brain_basics():
+    print("test_marko_brain_basics")
+    import marko_brain
+    perfect = {
+        "name": "Acme Movers", "email": "a@a.com", "phone": "555-1",
+        "website": "https://a.com/", "owner": "Pat Smith", "niche": "movers",
+        "city": "Richmond", "state": "VA", "campaign_id": "C001",
+        "contact_type": "both", "source": "scrape",
+        "pain_points": ["no online booking", "weak mobile", "no contact form"],
+    }
+    c = marko_brain.closability_score(perfect)
+    check("perfect lead closability >= 0.85", c >= 0.85, f"got {c}")
+    path = marko_brain.fastest_close_path(perfect)
+    check("perfect mover -> CALL FIRST path", path == "CALL FIRST",
+          f"got {path!r}")
+    rec = marko_brain.recommended_first_action(perfect)
+    check("recommended_first_action returns path+action+by_when+reason",
+          all(k in rec for k in ("path", "action", "by_when", "reason")),
+          f"got {rec}")
+    check("niche slug: 'movers' -> 'movers'",
+          marko_brain.niche_to_mockup_slug("movers") == "movers")
+    check("niche slug: 'dog groomer' -> 'groomers'",
+          marko_brain.niche_to_mockup_slug("dog groomer") == "groomers")
+    check("niche slug: 'med spa' -> 'med_spas'",
+          marko_brain.niche_to_mockup_slug("med spa") == "med_spas")
+    check("niche slug: unknown returns None",
+          marko_brain.niche_to_mockup_slug("alpaca whisperer") is None)
+    check("best_mockup_variant('movers') == emergency",
+          marko_brain.best_mockup_variant("movers") == "emergency")
+    check("best_mockup_variant('med spa') == booking",
+          marko_brain.best_mockup_variant("med spa") == "booking")
+
+
+def test_brain_and_mockup_routes():
+    print("test_brain_and_mockup_routes")
+    with tempfile.TemporaryDirectory() as tmp:
+        leads = {"leads": [{
+            "id": "L001", "name": "Acme Movers", "owner": "Pat Smith",
+            "phone": "555-1", "email": "a@a.com", "niche": "movers",
+            "city": "Richmond", "state": "VA", "website": "https://a.com",
+            "pain_points": ["no online booking", "weak mobile"],
+            "contact_type": "both", "source": "scrape",
+            "campaign_id": "C001", "status": "NEW",
+        }]}
+        _seed(tmp, leads=leads)
+        import dashboard
+        dashboard.CAMPAIGNS_FILE = commands.CAMPAIGNS_FILE
+        dashboard.LEADS_FILE = commands.LEADS_FILE
+        dashboard.LOG_FILE = commands.LOG_FILE
+        client = dashboard.app.test_client()
+
+        r = client.get("/lead/L001/brain")
+        check("/lead/L001/brain returns 200", r.status_code == 200,
+              f"got {r.status_code}")
+        j = r.get_json()
+        check("/brain returns path + closability + reason",
+              j.get("path") and j.get("closability") is not None
+              and j.get("reason"),
+              f"got keys {sorted(j.keys()) if j else None}")
+        check("/brain mockup hint resolves for movers",
+              j.get("mockup") and j["mockup"]["slug"] == "movers",
+              f"got mockup={j.get('mockup')}")
+
+        r404 = client.get("/lead/L999/brain")
+        check("/brain returns 404 for missing lead",
+              r404.status_code == 404)
+
+        rm = client.get("/mockup/movers/emergency?lead_id=L001")
+        check("/mockup/movers/emergency renders 200",
+              rm.status_code == 200, f"got {rm.status_code}")
+        body = rm.get_data(as_text=True)
+        check("/mockup renders lead's business name", "Acme Movers" in body)
+        check("/mockup renders lead's city", "Richmond" in body)
+
+        rp = client.get("/mockup/movers/booking")
+        check("/mockup without lead_id renders 200", rp.status_code == 200)
+        check("/mockup placeholder shows 'Your Business'",
+              "Your Business" in rp.get_data(as_text=True))
+
+        r_bad = client.get("/mockup/notarealniche/booking")
+        check("/mockup unknown slug returns 404", r_bad.status_code == 404)
+        bj = r_bad.get_json()
+        check("/mockup 404 includes available catalog",
+              "available" in bj and "movers" in bj["available"])
+
+
 def test_pipeline_summary_fields():
     print("test_pipeline_summary_fields")
     with tempfile.TemporaryDirectory() as tmp:
@@ -1262,6 +1348,8 @@ def main():
     test_marko_intel_voicemail()
     test_marko_intel_why_they_buy()
     test_voicemail_and_why_routes()
+    test_marko_brain_basics()
+    test_brain_and_mockup_routes()
     test_dnc_excluded_from_call_queue()
     test_set_lead_disposition_safety()
     test_pipeline_summary_fields()

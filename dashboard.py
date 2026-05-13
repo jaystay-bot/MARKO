@@ -142,6 +142,14 @@ def index():
                            "pipeline_high": 0, "best_niche": None, "deliverability": [],
                            "sends_today": 0, "cap_remaining": commands.DAILY_SEND_CAP,
                            "daily_cap": commands.DAILY_SEND_CAP}
+    # N128: real cashflow outcomes (BOOKED, CLOSED_WON, CLOSED_LOST, MRR).
+    try:
+        cashflow = commands.cashflow_summary()
+    except Exception:
+        cashflow = {"demos_booked": 0, "closed_won": 0, "closed_lost": 0,
+                    "mrr_total_won": 0, "mrr_this_month": 0,
+                    "won_this_month": 0, "close_rate_pct": None,
+                    "recent_wins": []}
     config_for_view = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
     compliance_state = {
         "config_blockers": marko_compliance.config_blockers(config_for_view),
@@ -175,6 +183,7 @@ def index():
         pipeline=pipeline,
         compliance=compliance_state,
         compliance_config=config_for_view,
+        cashflow=cashflow,
         lead_statuses=commands.LEAD_STATUSES,
         max_retries=commands.MAX_RETRIES,
         daily_cap=commands.DAILY_SEND_CAP,
@@ -318,6 +327,77 @@ def lead_stop(lead_id):
                                  "status": "DNC", "reason": "stop_button"})
             return redirect(url_for("index", message=f"Lead {lead_id} marked DO_NOT_CONTACT"))
     return redirect(url_for("index", message=f"Lead {lead_id} not found"))
+
+
+@app.route("/lead/<lead_id>/close", methods=["POST"])
+def lead_close(lead_id):
+    """N128: mark a deal CLOSED_WON or CLOSED_LOST + record MRR.
+
+    Form: outcome=won|lost, mrr_value=number, note=optional<=200 chars.
+    """
+    outcome = (request.form.get("outcome") or "").lower().strip()
+    won = outcome == "won"
+    mrr_raw = request.form.get("mrr_value") or "0"
+    note = request.form.get("note") or None
+    ok = commands.set_lead_closed(lead_id, won=won, mrr_value=mrr_raw, note=note)
+    if ok:
+        if won:
+            try:
+                msg = f"Lead {lead_id} -> CLOSED_WON | ${int(round(float(mrr_raw or 0)))}/mo"
+            except (TypeError, ValueError):
+                msg = f"Lead {lead_id} -> CLOSED_WON"
+        else:
+            msg = f"Lead {lead_id} -> CLOSED_LOST"
+    else:
+        msg = f"Lead {lead_id} not found"
+    return redirect(url_for("index", message=msg))
+
+
+@app.route("/mode/call")
+def mode_call():
+    """N130: single-card mobile/focus mode for working the call queue.
+
+    Renders one lead at a time with big buttons, tap-to-call, copy script,
+    disposition row, close-deal mini-form, and Prev/Next nav. Re-uses the
+    same call_queue + brain attachments as the main dashboard.
+    """
+    try:
+        idx = max(0, int(request.args.get("i", 0)))
+    except (TypeError, ValueError):
+        idx = 0
+
+    try:
+        sender_name = commands.get_config().get("sender_name", "Jay")
+    except Exception:
+        sender_name = "Jay"
+
+    queue = commands.call_queue(limit=25)
+    if not queue:
+        return render_template("mode_call.html", lead=None, idx=0, total=0,
+                               sender_name=sender_name)
+
+    if idx >= len(queue):
+        idx = len(queue) - 1
+    lead = queue[idx]
+    lead["_script"] = marko_intel.generate_script(lead, sender_name=sender_name)
+    lead["_missed_money"] = marko_intel.estimate_missed_money(lead)
+    try:
+        brain = marko_brain.recommended_first_action(lead)
+        brain["closability"] = marko_brain.closability_score(lead)
+        brain["best_angle"] = marko_brain.best_angle(lead)
+        lead["_brain"] = brain
+    except Exception:
+        lead["_brain"] = None
+
+    return render_template(
+        "mode_call.html",
+        lead=lead,
+        idx=idx,
+        total=len(queue),
+        prev_idx=max(0, idx - 1),
+        next_idx=min(len(queue) - 1, idx + 1),
+        sender_name=sender_name,
+    )
 
 
 @app.route("/api/compliance")

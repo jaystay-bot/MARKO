@@ -6,104 +6,150 @@
     <title>MARKO</title>
     <style>
         :root {
-            --bg: #0d0f10;
-            --panel: #15191c;
-            --panel2: #1c2125;
-            --border: #2a3138;
-            --text: #e6edf3;
-            --muted: #8d99a6;
+            --bg: #0a0c0e;
+            --bg-elev: #10141a;
+            --panel: #141a21;
+            --panel2: #1b232c;
+            --border: #232c36;
+            --border-strong: #2f3a47;
+            --text: #e8eef5;
+            --muted: #8a98a8;
+            --muted-dim: #5d6877;
             --accent: #00d68f;
+            --accent-strong: #00ffa6;
             --accent-dim: #0a6b48;
+            --money: #ffd24c;
             --warn: #ffb627;
             --danger: #ff5c5c;
             --link: #4cc2ff;
+            --shadow-card: 0 1px 0 rgba(255,255,255,0.02) inset, 0 8px 24px -16px rgba(0,0,0,0.6);
+            --shadow-elev: 0 1px 0 rgba(255,255,255,0.03) inset, 0 10px 30px -10px rgba(0,0,0,0.55);
+            --radius: 10px;
+            --radius-sm: 6px;
         }
         * { box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
             margin: 0;
-            background: var(--bg);
+            background:
+              radial-gradient(1100px 600px at 0% -10%, #0e1a14 0%, transparent 60%),
+              radial-gradient(900px 500px at 110% 0%, #0c1422 0%, transparent 55%),
+              var(--bg);
+            background-attachment: fixed;
             color: var(--text);
-            line-height: 1.4;
+            line-height: 1.45;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
         }
         header {
-            padding: 14px 18px;
-            background: var(--panel);
+            padding: 12px 20px;
+            background: rgba(16,20,26,0.85);
+            backdrop-filter: saturate(160%) blur(10px);
+            -webkit-backdrop-filter: saturate(160%) blur(10px);
             border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 40;
             display: flex;
             justify-content: space-between;
             align-items: center;
             flex-wrap: wrap;
             gap: 10px;
         }
-        header h1 { margin: 0; font-size: 18px; letter-spacing: 0.08em; color: var(--accent); }
+        header h1 {
+            margin: 0;
+            font-size: 16px;
+            letter-spacing: 0.16em;
+            font-weight: 700;
+            background: linear-gradient(90deg, var(--accent) 0%, #4cc2ff 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        nav { display: flex; flex-wrap: wrap; gap: 2px; }
         nav a {
             color: var(--muted);
             text-decoration: none;
-            margin-right: 14px;
-            font-size: 13px;
+            font-size: 12.5px;
+            font-weight: 500;
+            padding: 6px 10px;
+            border-radius: 6px;
+            transition: background 120ms, color 120ms;
         }
-        nav a:hover { color: var(--text); }
-        main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+        nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+        main { padding: 18px; padding-bottom: 90px; max-width: 1200px; margin: 0 auto; }
         .section {
-            background: var(--panel);
+            background: linear-gradient(180deg, var(--panel) 0%, var(--bg-elev) 100%);
             border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 14px;
-            margin-bottom: 16px;
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow-card);
         }
         .section h2 {
-            margin: 0 0 12px;
-            font-size: 14px;
+            margin: 0 0 14px;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.1em;
+            letter-spacing: 0.14em;
             color: var(--muted);
             border-bottom: 1px solid var(--border);
-            padding-bottom: 8px;
+            padding-bottom: 10px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
-        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+        .section h2 .h-ico { font-size: 14px; color: var(--accent); opacity: 0.9; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
         .stat {
             background: var(--panel2);
-            padding: 10px;
-            border-radius: 6px;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
             border: 1px solid var(--border);
+            transition: border-color 120ms, transform 120ms;
         }
-        .stat .num { font-size: 22px; font-weight: 600; color: var(--accent); }
-        .stat .lbl { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
+        .stat:hover { border-color: var(--border-strong); }
+        .stat .num { font-size: 24px; font-weight: 700; color: var(--accent); line-height: 1.1; letter-spacing: -0.01em; }
+        .stat .lbl { font-size: 10.5px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.08em; margin-top: 2px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
-        th { background: var(--panel2); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-        tr:hover td { background: rgba(255,255,255,0.02); }
+        th, td { padding: 9px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: var(--panel2); color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+        tr:hover td { background: rgba(255,255,255,0.025); }
         form.inline { display: inline; }
         input[type=text], input[type=number], input[type=email], select, textarea {
             background: var(--panel2);
             color: var(--text);
             border: 1px solid var(--border);
-            padding: 7px 9px;
-            border-radius: 4px;
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
             font-size: 13px;
             font-family: inherit;
+            transition: border-color 100ms, box-shadow 100ms;
         }
-        input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,214,143,0.15); }
         textarea { width: 100%; min-height: 100px; resize: vertical; }
         button, .btn {
             background: var(--accent);
-            color: #001b10;
+            color: #00120b;
             border: none;
-            padding: 7px 12px;
-            border-radius: 4px;
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
             font-size: 13px;
             font-weight: 600;
             font-family: inherit;
             text-decoration: none;
             display: inline-block;
+            letter-spacing: 0.01em;
+            transition: background 120ms, transform 80ms, box-shadow 120ms;
         }
-        button:hover, .btn:hover { background: #00f0a0; }
-        button.muted, .btn.muted { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
-        button.muted:hover, .btn.muted:hover { background: var(--border); color: var(--text); }
-        button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
-        button.danger:hover { background: var(--danger); color: #fff; }
+        button:hover, .btn:hover { background: var(--accent-strong); box-shadow: 0 0 0 3px rgba(0,214,143,0.18); }
+        button:active, .btn:active { transform: translateY(1px); }
+        button.muted, .btn.muted { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+        button.muted:hover, .btn.muted:hover { background: var(--bg-elev); border-color: var(--border-strong); color: var(--text); box-shadow: none; }
+        button.danger, .btn.danger { background: transparent; color: var(--danger); border: 1px solid rgba(255,92,92,0.4); }
+        button.danger:hover, .btn.danger:hover { background: rgba(255,92,92,0.12); color: #ffb0b0; border-color: var(--danger); box-shadow: none; }
         .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .row > * { flex: 0 0 auto; }
         .grow { flex: 1 1 auto; }
@@ -121,42 +167,49 @@
         .status-CALLED { color: #4cc2ff; }
         .status-REPLIED { color: #c084fc; }
         .msg {
-            background: var(--accent-dim);
-            color: #fff;
-            padding: 10px 14px;
-            border-radius: 4px;
-            margin-bottom: 14px;
+            background: linear-gradient(90deg, var(--accent-dim) 0%, #0e7c5a 100%);
+            color: #f0fff8;
+            padding: 11px 16px;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(0,214,143,0.25);
+            margin-bottom: 16px;
+            font-size: 13px;
         }
         .scroll-x { overflow-x: auto; }
-        details summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+        details summary { cursor: pointer; color: var(--muted); padding: 6px 0; transition: color 100ms; }
         details summary:hover { color: var(--text); }
+        details[open] summary { color: var(--text); }
         .pill {
-            display: inline-block;
-            padding: 1px 7px;
-            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            padding: 2px 9px;
+            border-radius: 999px;
             font-size: 11px;
             background: var(--panel2);
             border: 1px solid var(--border);
+            line-height: 1.5;
         }
-        .campaign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
-        .campaign-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .campaign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+        .campaign-card { background: var(--panel2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; display: flex; flex-direction: column; gap: 10px; transition: border-color 120ms; }
+        .campaign-card:hover { border-color: var(--border-strong); }
         .campaign-card .card-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
         .campaign-card .card-meta { display: flex; flex-wrap: wrap; gap: 4px; }
         .campaign-card .card-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 12px; }
-        .campaign-card .card-stats div { background: var(--panel); padding: 6px; border-radius: 4px; border: 1px solid var(--border); }
-        .campaign-card .card-stats b { display: block; font-size: 16px; }
-        .campaign-card .card-stats .lbl { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+        .campaign-card .card-stats div { background: var(--panel); padding: 8px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border); text-align: center; }
+        .campaign-card .card-stats b { display: block; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
+        .campaign-card .card-stats .lbl { display: block; color: var(--muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
         .campaign-card .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-        .copy-btn { font-size: 11px; padding: 2px 6px; }
-        .score-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
-        .score-HOT { background: #c2410c; color: #fff; }
-        .score-GOOD { background: #0e7c5a; color: #fff; }
+        .copy-btn { font-size: 11px; padding: 3px 7px; border-radius: 5px; }
+        .score-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; }
+        .score-HOT { background: linear-gradient(90deg, #ea580c, #c2410c); color: #fff7ed; box-shadow: 0 0 0 1px rgba(234,88,12,0.4); }
+        .score-GOOD { background: linear-gradient(90deg, #0e7c5a, #047857); color: #ecfdf5; }
         .score-WEAK { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
-        .score-MONEY { background: linear-gradient(90deg, #ffd700 0%, #ffb627 100%); color: #1a1500; box-shadow: 0 0 0 1px #ffb62799; }
+        .score-MONEY { background: linear-gradient(90deg, #ffd24c 0%, #ffb627 100%); color: #1a1200; box-shadow: 0 0 0 1px rgba(255,182,39,0.55), 0 0 16px -4px rgba(255,182,39,0.4); }
         .score-LOW { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
-        .score-DEAD { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
-        .call-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 6px; }
-        .call-card.priority { border-left: 3px solid var(--accent); }
+        .score-DEAD { background: transparent; color: var(--danger); border: 1px solid rgba(255,92,92,0.5); }
+        .call-card { background: linear-gradient(180deg, var(--panel2) 0%, rgba(20,26,33,0.6) 100%); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 10px; transition: border-color 120ms; }
+        .call-card:hover { border-color: var(--border-strong); }
+        .call-card.priority { border-left: 3px solid var(--accent); background: linear-gradient(180deg, rgba(0,214,143,0.06) 0%, var(--panel2) 100%); }
         .brain-panel { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; font-size: 12px; }
         .brain-path { padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; background: var(--panel2); color: var(--text); }
         .brain-path-CALL_FIRST { background: #c2410c; color: #fff; }
@@ -168,9 +221,9 @@
         .brain-when { color: var(--muted); }
         .brain-mockup { font-size: 11px; padding: 2px 8px; margin-left: auto; }
         .brain-reason { font-size: 11px; color: var(--muted); margin-top: 4px; font-style: italic; }
-        .focus-banner { background: linear-gradient(90deg, #c2410c 0%, #8a2c08 100%); color: #fff; padding: 10px 14px; border-radius: 6px; margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; }
-        .focus-title { font-weight: 700; letter-spacing: 0.05em; font-size: 14px; }
-        .focus-meta { font-size: 12px; opacity: 0.9; }
+        .focus-banner { background: linear-gradient(90deg, rgba(234,88,12,0.95) 0%, rgba(138,44,8,0.9) 100%); color: #fff7ed; padding: 12px 16px; border-radius: var(--radius-sm); margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; justify-content: space-between; box-shadow: 0 4px 18px -8px rgba(234,88,12,0.5); }
+        .focus-title { font-weight: 700; letter-spacing: 0.06em; font-size: 13.5px; text-transform: uppercase; }
+        .focus-meta { font-size: 12px; opacity: 0.92; }
         .focus-divider { text-align: center; margin: 10px 0; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; position: relative; }
         .focus-divider::before, .focus-divider::after { content: ''; position: absolute; top: 50%; width: 30%; border-top: 1px dashed var(--border); }
         .focus-divider::before { left: 0; }
@@ -244,6 +297,7 @@
         <nav>
             <a href="#home">Home</a>
             <a href="#money">Money Mode</a>
+            <a href="/mode/call">Call Mode</a>
             <a href="#callfirst">Call First</a>
             <a href="#cheatsheet">Cheat Sheet</a>
             <a href="#scrape">Scrape</a>
@@ -410,6 +464,21 @@
                     <div class="mc-big">✓ none</div>
                     <ul class="mc-list"><li>Safe to send — dry-run still recommended first.</li></ul>
                     {% endif %}
+
+                <div class="money-card">
+                    <div class="mc-title">Cashflow today</div>
+                    {% if cashflow and (cashflow.closed_won or cashflow.demos_booked) %}
+                    <div class="mc-big">${{ '{:,}'.format(cashflow.mrr_this_month) }}<span style="font-size:13px; color:var(--muted); font-weight:400;">/mo this month</span></div>
+                    <ul class="mc-list">
+                        <li>{{ cashflow.demos_booked }} demos booked · {{ cashflow.closed_won }} won · {{ cashflow.closed_lost }} lost</li>
+                        {% if cashflow.close_rate_pct is not none %}<li>close rate: {{ cashflow.close_rate_pct }}% on {{ cashflow.closed_won + cashflow.closed_lost }} attempts</li>{% endif %}
+                        {% if cashflow.mrr_total_won %}<li>lifetime MRR booked: ${{ '{:,}'.format(cashflow.mrr_total_won) }}/mo</li>{% endif %}
+                    </ul>
+                    {% else %}
+                    <div class="mc-big" style="color:var(--muted); font-size:14px;">No closes yet</div>
+                    <ul class="mc-list"><li>Click "Closed WON" on a call card to start tracking real revenue.</li></ul>
+                    {% endif %}
+                </div>
                 </div>
             </div>
             {% if compliance.deliverability %}
@@ -551,6 +620,25 @@
                     <form action="/lead/{{ l.id }}/disposition/NOT_INTERESTED" method="post"><button type="submit" class="btn muted">Not interested</button></form>
                     <form action="/lead/{{ l.id }}/stop" method="post" onsubmit="return confirm('Mark {{ l.name|truncate(40) }} as DO NOT CONTACT? They will be excluded from every future send.');"><button type="submit" class="btn muted dispo-dnc">🚫 DNC</button></form>
                 </div>
+                {% if l._brain %}
+                <details class="brain-panel" style="margin-top:8px; background:var(--panel); border-radius:4px; padding:8px 12px;">
+                    <summary style="cursor:pointer; color:var(--link); font-size:12px; font-weight:600;">Why this lead{% if l._brain.closability is not none %} · closability {{ l._brain.closability }}/100{% endif %}</summary>
+                    <div style="margin-top:6px; font-size:13px; line-height:1.5;">
+                        {% if l._brain.best_angle %}<div><strong style="color:var(--link);">Best angle:</strong> {{ l._brain.best_angle.hook or l._brain.best_angle }}</div>{% endif %}
+                        {% if l._brain.action %}<div><strong style="color:var(--link);">Next action:</strong> {{ l._brain.action }}</div>{% endif %}
+                        {% if l._brain.why_now %}<div style="color:var(--muted); margin-top:4px;">Why now: {{ l._brain.why_now }}</div>{% endif %}
+                    </div>
+                </details>
+                {% endif %}
+                <details style="margin-top:6px; background:var(--panel); border-radius:4px; padding:6px 10px;">
+                    <summary style="cursor:pointer; color:var(--muted); font-size:11px;">Closed the deal? Record it</summary>
+                    <form action="/lead/{{ l.id }}/close" method="post" style="margin-top:6px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                        <input type="number" name="mrr_value" min="0" step="1" placeholder="$/mo" style="width:100px;">
+                        <button type="submit" name="outcome" value="won" style="font-size:11px;">Closed WON</button>
+                        <button type="submit" name="outcome" value="lost" class="muted" style="font-size:11px;">Closed LOST</button>
+                    </form>
+                </details>
+
                 <div class="row1" style="margin-top:6px;">
                     <div class="meta">
                         {% if l.city %}{{ l.city }}{% if l.state %}, {{ l.state }}{% endif %} · {% endif %}

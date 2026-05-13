@@ -13,7 +13,11 @@
       "niche": "dog groomer",
       "status": "INTERESTED",
       "source": "scrape",
-      "last_attempt_at": "2026-05-12T21:58:23.085005"
+      "last_attempt_at": "2026-05-12T21:58:23.085005",
+      "pain_points": [
+        "no online booking",
+        "no contact form"
+      ]
     },
     {
       "id": "L002",
@@ -27,7 +31,10 @@
       "contact_type": "phone",
       "niche": "dog groomer",
       "status": "NEW",
-      "source": "scrape"
+      "source": "scrape",
+      "pain_points": [
+        "no contact form"
+      ]
     },
     {
       "id": "L003",
@@ -41,7 +48,11 @@
       "contact_type": "both",
       "niche": "dog groomer",
       "status": "CONTACTED",
-      "source": "scrape"
+      "source": "scrape",
+      "pain_points": [
+        "no contact form",
+        "copyright 2024"
+      ]
     },
     {
       "id": "L004",
@@ -69,7 +80,11 @@
       "contact_type": "both",
       "niche": "dog groomer",
       "status": "CONTACTED",
-      "source": "scrape"
+      "source": "scrape",
+      "pain_points": [
+        "no contact form",
+        "no social presence"
+      ]
     },
     {
       "id": "L006",
@@ -111,7 +126,11 @@
       "contact_type": "phone",
       "niche": "dog groomer",
       "status": "NEW",
-      "source": "scrape"
+      "source": "scrape",
+      "pain_points": [
+        "no online booking",
+        "no contact form"
+      ]
     },
     {
       "id": "L009",
@@ -125,7 +144,11 @@
       "contact_type": "phone",
       "niche": "dog groomer",
       "status": "NEW",
-      "source": "scrape"
+      "source": "scrape",
+      "pain_points": [
+        "no online booking",
+        "no contact form"
+      ]
     },
     {
       "id": "L010",
@@ -153,7 +176,11 @@
       "contact_type": "both",
       "niche": "dog groomer",
       "status": "CONTACTED",
-      "source": "scrape"
+      "source": "scrape",
+      "pain_points": [
+        "no online booking",
+        "no contact form"
+      ]
     },
     {
       "id": "L012",
@@ -183,7 +210,10 @@
       "status": "NEW",
       "source": "scrape",
       "campaign_id": "C001",
-      "created_at": "2026-05-12T20:53:55.646943"
+      "created_at": "2026-05-12T20:53:55.646943",
+      "pain_points": [
+        "no contact form"
+      ]
     },
     {
       "id": "L014",
@@ -199,7 +229,10 @@
       "status": "NEW",
       "source": "scrape",
       "campaign_id": "C001",
-      "created_at": "2026-05-12T20:53:57.360059"
+      "created_at": "2026-05-12T20:53:57.360059",
+      "pain_points": [
+        "no online booking"
+      ]
     },
     {
       "id": "L015",
@@ -231,7 +264,12 @@
       "status": "NEW",
       "source": "scrape",
       "campaign_id": "C001",
-      "created_at": "2026-05-12T20:54:03.590415"
+      "created_at": "2026-05-12T20:54:03.590415",
+      "pain_points": [
+        "no online booking",
+        "no contact form",
+        "copyright 2018"
+      ]
     },
     {
       "id": "L017",
@@ -247,7 +285,10 @@
       "status": "NEW",
       "source": "scrape",
       "campaign_id": "C001",
-      "created_at": "2026-05-12T20:54:05.586022"
+      "created_at": "2026-05-12T20:54:05.586022",
+      "pain_points": [
+        "no contact form"
+      ]
     },
     {
       "id": "L018",
@@ -279,7 +320,11 @@
       "status": "NEW",
       "source": "scrape",
       "campaign_id": "C001",
-      "created_at": "2026-05-12T20:54:25.936912"
+      "created_at": "2026-05-12T20:54:25.936912",
+      "pain_points": [
+        "no contact form",
+        "copyright 2011"
+      ]
     },
     {
       "id": "L020",
@@ -295,7 +340,10 @@
       "status": "NEW",
       "source": "scrape",
       "campaign_id": "C001",
-      "created_at": "2026-05-12T20:54:32.325782"
+      "created_at": "2026-05-12T20:54:32.325782",
+      "pain_points": [
+        "no contact form"
+      ]
     },
     {
       "id": "L021",
@@ -311,7 +359,10 @@
       "status": "NEW",
       "source": "scrape",
       "campaign_id": "C001",
-      "created_at": "2026-05-12T20:54:33.248140"
+      "created_at": "2026-05-12T20:54:33.248140",
+      "pain_points": [
+        "no contact form"
+      ]
     }
   ]
 }

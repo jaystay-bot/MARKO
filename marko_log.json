@@ -194,6 +194,44 @@
       "action": "lead_status",
       "lead_id": "L001",
       "status": "INTERESTED"
+    },
+    {
+      "timestamp": "2026-05-12T22:08:33.938263",
+      "action": "config_update",
+      "scope": "compliance",
+      "fields": [
+        "deliverability.dkim_ok",
+        "deliverability.dmarc_ok",
+        "deliverability.spf_ok",
+        "from_email",
+        "physical_address",
+        "sender_name",
+        "stop_contact_list",
+        "unsubscribe_text"
+      ]
+    },
+    {
+      "timestamp": "2026-05-12T22:10:21.373303",
+      "action": "enrich_batch",
+      "considered": 21,
+      "enriched": 14,
+      "owner_hits": 0,
+      "pain_hits": 14,
+      "errors": 0
+    },
+    {
+      "timestamp": "2026-05-12T22:16:32.821610",
+      "action": "lead_close",
+      "lead_id": "L003",
+      "status": "CLOSED_WON",
+      "mrr_value": 297
+    },
+    {
+      "timestamp": "2026-05-12T22:16:32.847694",
+      "action": "lead_close",
+      "lead_id": "L004",
+      "status": "CLOSED_LOST",
+      "mrr_value": 0
     }
   ]
 }

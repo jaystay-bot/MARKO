@@ -258,6 +258,22 @@ def run_tests():
             check("29. 5-tier score CSS classes used on page",
                   len(tiers_seen) >= 1, f"tiers seen: {tiers_seen}")
 
+            # 30. N261 brain panel rendered on Call First cards
+            if page.locator(".call-card").count() > 0:
+                check("30. brain-panel present on at least one card",
+                      page.locator(".brain-panel").count() >= 1)
+                # Path pill class should be one of the 4 known variants
+                paths_seen = [c for c in ("brain-path-CALL_FIRST",
+                                          "brain-path-EMAIL_FIRST",
+                                          "brain-path-SEND_MOCKUP_FIRST",
+                                          "brain-path-FOLLOW-UP_LATER")
+                              if c in content]
+                check("30b. brain-path class is one of known variants",
+                      len(paths_seen) >= 1, f"paths seen: {paths_seen}")
+            else:
+                check("30. brain-panel (no call cards in fixture, skipped)", True)
+                check("30b. brain-path (no call cards, skipped)", True)
+
         finally:
             browser.close()
 

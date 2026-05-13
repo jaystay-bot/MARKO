@@ -412,6 +412,59 @@ def _format_money_range(money):
     return f"${money['low']:,}-${money['high']:,}/mo ({money['confidence']})"
 
 
+# ---------- N261: Mockup niche normalization ----------
+#
+# Real lead.niche values are messy ("dog groomer", "med spa", "movers"...).
+# Mockup filenames live in templates/mockup/<slug>_<variant>.html with slugs
+# like "groomers", "med_spas", "movers". This map is the one place that
+# bridges the two so the dashboard + route never need to guess.
+
+_NICHE_TO_MOCKUP_SLUG = {
+    "movers": "movers", "mover": "movers", "moving": "movers",
+    "roofers": "roofers", "roofer": "roofers", "roofing": "roofers",
+    "med spas": "med_spas", "med spa": "med_spas", "medspa": "med_spas",
+    "dog groomers": "groomers", "dog groomer": "groomers",
+    "groomers": "groomers", "groomer": "groomers", "grooming": "groomers",
+    "hair stylists": "salons", "hair stylist": "salons",
+    "salon": "salons", "salons": "salons", "hair": "salons",
+    "auto shops": "auto_shops", "auto shop": "auto_shops", "auto": "auto_shops",
+    "detailing": "detailers", "detailer": "detailers",
+    "detailers": "detailers", "detail": "detailers",
+    "towing": "towing", "tow": "towing",
+    "plumbers": "plumbers", "plumber": "plumbers", "plumbing": "plumbers",
+    "hvac": "hvac",
+}
+
+
+def niche_to_mockup_slug(niche):
+    """Map a free-text niche to a mockup filename slug, or None.
+
+    Conservative -- only returns a slug when the niche substring-matches
+    a known key. Never invents a slug.
+    """
+    if not niche:
+        return None
+    nlow = str(niche).strip().lower()
+    # Exact match first.
+    if nlow in _NICHE_TO_MOCKUP_SLUG:
+        return _NICHE_TO_MOCKUP_SLUG[nlow]
+    # Substring fallback (handles "Dog Grooming, Pet Food..." etc).
+    for key, slug in _NICHE_TO_MOCKUP_SLUG.items():
+        if key in nlow:
+            return slug
+    return None
+
+
+def best_mockup_variant(niche):
+    """Pick booking vs emergency variant for a niche.
+
+    High-urgency niches (movers/roofers/plumbers/HVAC/towing) get the
+    emergency variant -- they win deals when a prospect is bleeding right
+    now. Slower-paced niches get the booking variant.
+    """
+    return "emergency" if _is_high_urgency(niche) else "booking"
+
+
 # ---------- §4 scope: single read-only function for the dashboard lane ----------
 #
 # The dashboard lane may eventually want to render today's call list.
