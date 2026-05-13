@@ -15,7 +15,8 @@ It consists of:
 
 ## CORE FILES
 
-- main.py → CLI entry point
+- cli.py → CLI entry point
+- main.py → Vercel/WSGI entrypoint (exposes Flask `app`; no CLI logic)
 - commands.py → MARKO command logic
 - dashboard.py → Flask UI
 - campaigns.json → campaign tracking

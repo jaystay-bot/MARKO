@@ -1,0 +1,76 @@
+{
+  "outreach": [
+    {
+      "id": "T001",
+      "name": "Groomer cold open",
+      "subject": "Quick question about your grooming work",
+      "body": "Hey {{owner}},\n\nQuick question — when you’re working on a breed at {{business_name}}, do you ever double check blade lengths or cuts just to be sure you’re doing it right?\n\nI’ve been building something specifically for groomers that helps with breed cuts and also lets you see what you’re actually making per job without guessing.\n\nIf you’re open to it, I can send a quick preview.\n\n– {{sender_name}}"
+    },
+    {
+      "id": "T002",
+      "name": "Generic local business",
+      "subject": "Quick question for {{business_name}}",
+      "body": "Hey {{owner}},\n\nI work with local businesses in {{city}} and have an idea I think could help {{business_name}}. Mind if I send a quick preview?\n\n– {{sender_name}}"
+    },
+    {
+      "id": "T003",
+      "name": "Movers — BookerMove pitch",
+      "subject": "Booking calls for {{business_name}}?",
+      "body": "Hey {{owner}},\n\nNoticed {{business_name}} in {{city}} — are most of your booking calls coming in by phone? I’m putting together a tool that lets local movers capture booking details when they can’t pick up.\n\nWorth a 30-sec preview?\n\n– {{sender_name}}"
+    },
+    {
+      "id": "T004",
+      "name": "Roofers — storm follow-up",
+      "subject": "{{city}} roofs after the last storm",
+      "body": "Hey {{owner}},\n\nQuick one — after the recent weather in {{city}}, are you swamped with inspections or is the phone slow?\n\nEither way, I’ve been building something that triages new roof inquiries so the hot ones don’t fall through. Want me to send a preview?\n\n– {{sender_name}}"
+    },
+    {
+      "id": "T005",
+      "name": "Med spas — appointment fillers",
+      "subject": "Filling slow days at {{business_name}}",
+      "body": "Hey {{owner}},\n\nI work with med spas around {{city}} on filling slower weekday slots without discount-blasting your list.\n\nWorth a quick look if you ever have gaps?\n\n– {{sender_name}}"
+    },
+    {
+      "id": "T006",
+      "name": "Detailing — repeat bookings",
+      "subject": "Getting repeat detail customers in {{city}}",
+      "body": "Hey {{owner}},\n\nMost detailers I talk to in {{city}} say repeat work is where the margin is, but reminders fall through.\n\nMind if I send a quick preview of what I’ve been building for shops like {{business_name}}?\n\n– {{sender_name}}"
+    },
+    {
+      "id": "T007",
+      "name": "Towing — after-hours capture",
+      "subject": "Missed tow calls at night?",
+      "body": "Hey {{owner}},\n\nQuick question for {{business_name}} — when a call comes in at 2am and the line’s busy, where does it go?\n\nI’ve been working on something that catches those without you picking up. Worth showing you?\n\n– {{sender_name}}"
+    },
+    {
+      "id": "T008",
+      "name": "Restaurants — slow-day fill",
+      "subject": "Tuesday lunch at {{business_name}}",
+      "body": "Hey {{owner}},\n\nNot trying to sell you ads — just curious how you handle the slow Tuesday/Wednesday lunch crowd in {{city}}.\n\nI’ve got an angle that doesn’t involve discount platforms. Open to a quick preview?\n\n– {{sender_name}}"
+    }
+  ],
+  "campaign_presets": [
+    {"id": "CP001", "name": "GroomerOS", "project": "groomeros"},
+    {"id": "CP002", "name": "BookerMove", "project": "bookermove"},
+    {"id": "CP003", "name": "TalkBot", "project": "talkbot"}
+  ],
+  "niche_presets": [
+    "movers",
+    "roofers",
+    "med spas",
+    "dog groomers",
+    "restaurants",
+    "hair stylists",
+    "auto shops",
+    "detailing",
+    "towing"
+  ],
+  "location_presets": [
+    {"city": "Colonial Heights", "state": "VA"},
+    {"city": "Petersburg", "state": "VA"},
+    {"city": "Chesterfield", "state": "VA"},
+    {"city": "Richmond", "state": "VA"},
+    {"city": "Virginia", "state": "VA"},
+    {"city": "USA", "state": "US"}
+  ]
+}

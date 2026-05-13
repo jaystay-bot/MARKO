@@ -3,15 +3,23 @@ import csv
 import json
 import os
 import re
+from datetime import datetime
+from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 from ddgs import DDGS
 
+import commands  # for is_duplicate_lead
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LEADS_FILE = os.path.join(BASE_DIR, "leads.json")
+LOG_FILE = os.path.join(BASE_DIR, "marko_log.json")
+CAMPAIGNS_FILE = os.path.join(BASE_DIR, "campaigns.json")
 
 EMAIL_REGEX = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
 PHONE_REGEX = r'(?<!\d)\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)'
+
+SUBPAGES = ['/contact', '/contact-us', '/about', '/about-us', '/services']
 
 # Filter lists
 SKIP_URLS = ['reddit', 'yelp', 'top10', 'blog', 'article', 'wikipedia', 'facebook', 'twitter', 'instagram', 'linkedin', 'pinterest', 'tiktok', 'youtube']
@@ -49,23 +57,58 @@ def is_valid_email(email):
     return not any(skip in email_lower for skip in SKIP_EMAILS)
 
 
-def extract_contact_from_url(url):
-    """Extract email and phone from a webpage."""
+def _same_domain_subpages(url):
+    """Return same-domain subpage URLs to try, given a starting URL."""
+    try:
+        p = urlparse(url)
+        if not p.scheme or not p.netloc:
+            return []
+        base = f"{p.scheme}://{p.netloc}"
+    except Exception:
+        return []
+    return [base + sp for sp in SUBPAGES]
+
+
+def _extract_from_text(text):
     email = None
     phone = None
-    try:
-        resp = requests.get(url, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
-        text = resp.text
-        emails = re.findall(EMAIL_REGEX, text)
-        phones = re.findall(PHONE_REGEX, text)
-        for e in emails:
-            if is_valid_email(e):
-                email = e
-                break
-        if phones:
-            phone = phones[0]
-    except:
-        pass
+    for e in re.findall(EMAIL_REGEX, text):
+        if is_valid_email(e):
+            email = e
+            break
+    phones = re.findall(PHONE_REGEX, text)
+    if phones:
+        phone = phones[0]
+    return email, phone
+
+
+def extract_contact_from_url(url):
+    """Extract email and phone from the homepage and same-domain subpages.
+
+    Walks /contact, /contact-us, /about, /about-us, /services in order, stopping
+    as soon as both email and phone are found. Failed pages are skipped silently.
+    """
+    email = None
+    phone = None
+    seen = set()
+    candidates = [url] + _same_domain_subpages(url)
+    for page in candidates:
+        if not page or page in seen:
+            continue
+        seen.add(page)
+        try:
+            resp = requests.get(page, timeout=5, headers={"User-Agent": "Mozilla/5.0"})
+            if getattr(resp, "status_code", 0) != 200:
+                continue
+            e, p = _extract_from_text(resp.text)
+        except Exception:
+            continue
+        if not email and e:
+            email = e
+        if not phone and p:
+            phone = p
+        if email and phone:
+            break
     return email, phone
 
 
@@ -80,21 +123,43 @@ def get_contact_type(email, phone):
     return None
 
 
-def is_duplicate(leads, name, city):
-    """Check if lead already exists by name and city."""
-    for lead in leads:
-        if lead.get("name", "").lower() == name.lower() and lead.get("city", "").lower() == city.lower():
-            return True
-    return False
+
+
+def _active_campaign_id():
+    if not os.path.exists(CAMPAIGNS_FILE):
+        return None
+    try:
+        with open(CAMPAIGNS_FILE, "r") as f:
+            data = json.load(f)
+        for c in data.get("campaigns", []):
+            if c.get("status") == "ACTIVE":
+                return c["id"]
+    except Exception:
+        pass
+    return None
+
+
+def _log(entry):
+    if not os.path.exists(LOG_FILE):
+        return
+    try:
+        with open(LOG_FILE, "r") as f:
+            data = json.load(f)
+        data.setdefault("log", []).append({"timestamp": datetime.now().isoformat(), **entry})
+        with open(LOG_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 
 def scrape(niche, city, state, max_results=20):
-    """Scrape leads for a niche in a location."""
+    """Scrape leads for a niche in a location. Returns added count."""
     query = f"{niche} in {city}, {state}"
     print(f"Searching: {query}")
 
     data = load_leads()
     leads = data.get("leads", [])
+    campaign_id = _active_campaign_id()
     added = 0
     skipped_junk = 0
     skipped_no_contact = 0
@@ -105,7 +170,9 @@ def scrape(niche, city, state, max_results=20):
             results = list(ddgs.text(query, max_results=max_results))
     except Exception as e:
         print(f"Search error: {e}")
-        return
+        _log({"action": "scrape", "niche": niche, "city": city, "state": state,
+              "added": 0, "error": str(e)})
+        return 0
 
     print(f"Found {len(results)} results, filtering...")
 
@@ -129,8 +196,8 @@ def scrape(niche, city, state, max_results=20):
         # Clean business name
         name = title.split(" - ")[0].split(" | ")[0].split(" :: ")[0].strip()
 
-        # Skip if duplicate
-        if is_duplicate(leads, name, city):
+        # Quick dedupe pre-fetch: website domain or name+city already present
+        if commands.is_duplicate_lead(leads, name=name, website=url, city=city):
             skipped_dupe += 1
             continue
 
@@ -142,6 +209,11 @@ def scrape(niche, city, state, max_results=20):
         if not contact_type:
             skipped_no_contact += 1
             print(f"    - Skipped: no contact info")
+            continue
+
+        # Post-fetch dedupe: same email/phone as an existing lead
+        if commands.is_duplicate_lead(leads, name=name, email=email, phone=phone, website=url, city=city):
+            skipped_dupe += 1
             continue
 
         new_id = f"L{len(leads) + 1:03d}"
@@ -157,7 +229,9 @@ def scrape(niche, city, state, max_results=20):
             "contact_type": contact_type,
             "niche": niche,
             "status": "NEW",
-            "source": "scrape"
+            "source": "scrape",
+            "campaign_id": campaign_id,
+            "created_at": datetime.now().isoformat(),
         }
 
         leads.append(lead)
@@ -167,11 +241,17 @@ def scrape(niche, city, state, max_results=20):
     data["leads"] = leads
     save_leads(data)
 
+    _log({"action": "scrape", "niche": niche, "city": city, "state": state,
+          "added": added, "skipped_junk": skipped_junk,
+          "skipped_no_contact": skipped_no_contact, "skipped_dupe": skipped_dupe,
+          "campaign_id": campaign_id})
+
     print(f"\n=== RESULTS ===")
     print(f"Added: {added}")
     print(f"Skipped (junk): {skipped_junk}")
     print(f"Skipped (no contact): {skipped_no_contact}")
     print(f"Skipped (duplicate): {skipped_dupe}")
+    return added
 
 
 def add_lead_from_source(name, email, niche, source="manual"):
@@ -186,7 +266,9 @@ def add_lead_from_source(name, email, niche, source="manual"):
         "email": email,
         "niche": niche,
         "source": source,
-        "status": "NEW"
+        "status": "NEW",
+        "campaign_id": _active_campaign_id(),
+        "created_at": datetime.now().isoformat(),
     }
 
     leads.append(lead)

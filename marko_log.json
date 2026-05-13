@@ -55,6 +55,115 @@
       "lead_id": "L011",
       "recipient": "contact@theridgedogshop.com",
       "status": "sent"
+    },
+    {
+      "timestamp": "2026-05-12T20:10:34.267502",
+      "action": "export",
+      "scope": "leads",
+      "count": 12,
+      "campaign_id": null,
+      "status": null
+    },
+    {
+      "timestamp": "2026-05-12T20:10:34.275503",
+      "action": "export",
+      "scope": "campaigns",
+      "count": 3
+    },
+    {
+      "timestamp": "2026-05-12T20:13:00.499325",
+      "action": "export",
+      "scope": "leads",
+      "count": 12,
+      "campaign_id": null,
+      "status": null
+    },
+    {
+      "timestamp": "2026-05-12T20:13:00.512328",
+      "action": "export",
+      "scope": "leads",
+      "count": 0,
+      "campaign_id": "C001",
+      "status": null
+    },
+    {
+      "timestamp": "2026-05-12T20:13:00.523331",
+      "action": "export",
+      "scope": "campaigns",
+      "count": 3
+    },
+    {
+      "timestamp": "2026-05-12T20:13:00.533333",
+      "action": "export",
+      "scope": "leads",
+      "count": 6,
+      "campaign_id": null,
+      "status": "NEW"
+    },
+    {
+      "timestamp": "2026-05-12T20:52:36.891625",
+      "action": "export",
+      "scope": "leads",
+      "count": 0,
+      "campaign_id": "C001",
+      "status": null
+    },
+    {
+      "timestamp": "2026-05-12T20:52:36.904627",
+      "action": "export",
+      "scope": "campaigns",
+      "count": 3
+    },
+    {
+      "timestamp": "2026-05-12T20:52:36.919631",
+      "action": "retry_pending",
+      "count": 0,
+      "cooldown_minutes": 60,
+      "cap_applied": 50
+    },
+    {
+      "timestamp": "2026-05-12T20:54:14.776927",
+      "action": "scrape",
+      "niche": "movers",
+      "city": "Richmond",
+      "state": "VA",
+      "added": 9,
+      "skipped_junk": 8,
+      "skipped_no_contact": 3,
+      "skipped_dupe": 0,
+      "campaign_id": "C001"
+    },
+    {
+      "timestamp": "2026-05-12T20:54:18.008726",
+      "action": "scrape",
+      "niche": "movers",
+      "city": "Richmond",
+      "state": "VA",
+      "added": 8,
+      "skipped_junk": 9,
+      "skipped_no_contact": 3,
+      "skipped_dupe": 0,
+      "campaign_id": "C001"
+    },
+    {
+      "timestamp": "2026-05-12T20:54:33.258147",
+      "action": "scrape",
+      "niche": "movers",
+      "city": "Richmond",
+      "state": "VA",
+      "added": 9,
+      "skipped_junk": 8,
+      "skipped_no_contact": 3,
+      "skipped_dupe": 0,
+      "campaign_id": "C001"
+    },
+    {
+      "timestamp": "2026-05-12T20:54:59.752230",
+      "action": "export",
+      "scope": "leads",
+      "count": 21,
+      "campaign_id": null,
+      "status": null
     }
   ]
 }

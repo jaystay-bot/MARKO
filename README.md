@@ -19,17 +19,20 @@ Open http://127.0.0.1:5000
 ## CLI Commands
 
 ```bash
-python main.py run <name> <project>
-python main.py add_lead <name> <email> <niche>
-python main.py send
-python main.py log <count> [opens] [replies] [signups]
-python main.py analyze
-python main.py report
+python cli.py --help
+python cli.py run <name> <project>
+python cli.py add_lead <name> <email> <niche>
+python cli.py send [--dry-run]
+python cli.py log <count> [opens] [replies] [signups]
+python cli.py analyze
+python cli.py report
+python cli.py scrape <niche> <city> <state>
 ```
 
 ## Files
 
-- `main.py` - CLI entry point
+- `cli.py` - CLI entry point
+- `main.py` - Vercel/WSGI entrypoint (exposes Flask `app`)
 - `commands.py` - Command logic
 - `dashboard.py` - Flask UI
 - `scraper.py` - Lead utilities
@@ -38,3 +41,5 @@ python main.py report
 - `leads.json` - Lead data
 - `config.json` - Settings
 - `marko_log.json` - Action log
+- `templates.json` - Outreach/campaign/niche presets
+- `smoke_test.py` - Local smoke tests (no network)

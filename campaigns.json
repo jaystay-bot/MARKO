@@ -12,6 +12,32 @@
       "verdict": "HOLD",
       "last_action": "2026-04-09 08:04",
       "next": "ANALYZE"
+    },
+    {
+      "id": "C002",
+      "name": "supportbookermove@gmail.com",
+      "project": "bookermove",
+      "status": "ACTIVE",
+      "sends": 0,
+      "open_rate": 0,
+      "replies": 0,
+      "signups": 0,
+      "verdict": "PENDING",
+      "last_action": "2026-05-12 19:59",
+      "next": "SEND"
+    },
+    {
+      "id": "C003",
+      "name": "bookermove",
+      "project": "talkbot",
+      "status": "ACTIVE",
+      "sends": 0,
+      "open_rate": 0,
+      "replies": 0,
+      "signups": 0,
+      "verdict": "PENDING",
+      "last_action": "2026-05-12 19:59",
+      "next": "SEND"
     }
   ]
 }

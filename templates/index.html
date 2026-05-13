@@ -1,106 +1,614 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MARKO</title>
     <style>
-        body { font-family: monospace; margin: 20px; background: #111; color: #eee; }
-        h1 { color: #0f0; }
-        h2 { color: #0a0; margin-top: 30px; }
-        table { border-collapse: collapse; width: 100%; margin: 10px 0; }
-        th, td { border: 1px solid #333; padding: 8px; text-align: left; }
-        th { background: #222; }
-        form { display: inline; margin: 5px; }
-        input[type=text], input[type=number] { background: #222; color: #fff; border: 1px solid #444; padding: 5px; }
-        button { background: #0a0; color: #000; border: none; padding: 8px 15px; cursor: pointer; margin: 2px; }
-        button:hover { background: #0f0; }
-        .action-btn { background: #333; color: #0f0; }
-        .action-btn:hover { background: #444; }
-        .verdict-SCALE { color: #0ff; }
-        .verdict-HOLD { color: #ff0; }
-        .verdict-PIVOT { color: #f80; }
-        .verdict-KILL { color: #f00; }
-        .verdict-BLOCKED { color: #888; }
-        .status-ACTIVE { color: #0f0; }
-        .status-KILLED { color: #f00; }
-        .msg { background: #222; padding: 10px; margin: 10px 0; border-left: 3px solid #0f0; }
+        :root {
+            --bg: #0d0f10;
+            --panel: #15191c;
+            --panel2: #1c2125;
+            --border: #2a3138;
+            --text: #e6edf3;
+            --muted: #8d99a6;
+            --accent: #00d68f;
+            --accent-dim: #0a6b48;
+            --warn: #ffb627;
+            --danger: #ff5c5c;
+            --link: #4cc2ff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.4;
+        }
+        header {
+            padding: 14px 18px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        header h1 { margin: 0; font-size: 18px; letter-spacing: 0.08em; color: var(--accent); }
+        nav a {
+            color: var(--muted);
+            text-decoration: none;
+            margin-right: 14px;
+            font-size: 13px;
+        }
+        nav a:hover { color: var(--text); }
+        main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+        .section {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+            margin-bottom: 16px;
+        }
+        .section h2 {
+            margin: 0 0 12px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--muted);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+        .stat {
+            background: var(--panel2);
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+        .stat .num { font-size: 22px; font-weight: 600; color: var(--accent); }
+        .stat .lbl { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.05em; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { background: var(--panel2); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+        form.inline { display: inline; }
+        input[type=text], input[type=number], input[type=email], select, textarea {
+            background: var(--panel2);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 7px 9px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        input:focus, select:focus, textarea:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+        textarea { width: 100%; min-height: 100px; resize: vertical; }
+        button, .btn {
+            background: var(--accent);
+            color: #001b10;
+            border: none;
+            padding: 7px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+            text-decoration: none;
+            display: inline-block;
+        }
+        button:hover, .btn:hover { background: #00f0a0; }
+        button.muted, .btn.muted { background: var(--panel2); color: var(--muted); border: 1px solid var(--border); }
+        button.muted:hover, .btn.muted:hover { background: var(--border); color: var(--text); }
+        button.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+        button.danger:hover { background: var(--danger); color: #fff; }
+        .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .row > * { flex: 0 0 auto; }
+        .grow { flex: 1 1 auto; }
+        .verdict-SCALE { color: #4cc2ff; }
+        .verdict-HOLD { color: var(--warn); }
+        .verdict-PIVOT { color: #ff9c2a; }
+        .verdict-KILL { color: var(--danger); }
+        .verdict-PENDING { color: var(--muted); }
+        .status-ACTIVE { color: var(--accent); }
+        .status-KILLED, .status-ARCHIVED { color: var(--muted); }
+        .status-NEW { color: var(--link); }
+        .status-CONTACTED { color: var(--accent); }
+        .status-RETRY { color: var(--warn); }
+        .status-FAILED { color: var(--danger); }
+        .msg {
+            background: var(--accent-dim);
+            color: #fff;
+            padding: 10px 14px;
+            border-radius: 4px;
+            margin-bottom: 14px;
+        }
+        .scroll-x { overflow-x: auto; }
+        details summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+        details summary:hover { color: var(--text); }
+        .pill {
+            display: inline-block;
+            padding: 1px 7px;
+            border-radius: 10px;
+            font-size: 11px;
+            background: var(--panel2);
+            border: 1px solid var(--border);
+        }
+        .campaign-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+        .campaign-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .campaign-card .card-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .campaign-card .card-meta { display: flex; flex-wrap: wrap; gap: 4px; }
+        .campaign-card .card-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 12px; }
+        .campaign-card .card-stats div { background: var(--panel); padding: 6px; border-radius: 4px; border: 1px solid var(--border); }
+        .campaign-card .card-stats b { display: block; font-size: 16px; }
+        .campaign-card .card-stats .lbl { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+        .campaign-card .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+        .copy-btn { font-size: 11px; padding: 2px 6px; }
+        .preview-out { background: var(--panel2); padding: 10px; border-radius: 4px; margin-top: 6px; border-left: 3px solid var(--accent); font-size: 12px; white-space: pre-wrap; display: none; }
+        .preview-out.show { display: block; }
+        @media (max-width: 640px) {
+            main { padding: 10px; }
+            header h1 { font-size: 16px; }
+            .section { padding: 10px; }
+            th, td { padding: 6px; font-size: 12px; }
+            input, select, button { font-size: 12px; }
+        }
     </style>
 </head>
 <body>
-    <h1>MARKO DASHBOARD</h1>
+    <header>
+        <h1>MARKO</h1>
+        <nav>
+            <a href="#home">Home</a>
+            <a href="#cheatsheet">Cheat Sheet</a>
+            <a href="#scrape">Scrape</a>
+            <a href="#campaigns">Campaigns</a>
+            <a href="#retry">Retry</a>
+            <a href="#leads">Leads</a>
+            <a href="#templates">Templates</a>
+            <a href="#activity">Activity</a>
+        </nav>
+    </header>
+    <main>
+        {% if is_vercel %}
+        <div class="msg" style="background:#7a4a00; color:#fff;">
+            ⚠ Vercel demo mode: JSON storage may not persist between requests on serverless. Use local mode (<code>python dashboard.py</code>) for real campaigns.
+        </div>
+        {% endif %}
+        {% if message %}<div class="msg">{{ message }}</div>{% endif %}
 
-    {% if message %}
-    <div class="msg">{{ message }}</div>
-    {% endif %}
+        <section class="section" id="home">
+            <h2>Home</h2>
+            <div class="stats">
+                <div class="stat"><div class="num">{{ stats.campaigns_total }}</div><div class="lbl">Campaigns</div></div>
+                <div class="stat"><div class="num">{{ stats.campaigns_active }}</div><div class="lbl">Active</div></div>
+                <div class="stat"><div class="num">{{ stats.leads_total }}</div><div class="lbl">Leads</div></div>
+                <div class="stat"><div class="num">{{ stats.leads_contacted }}</div><div class="lbl">Contacted</div></div>
+                <div class="stat"><div class="num">{{ stats.leads_with_email }}</div><div class="lbl">With Email</div></div>
+                <div class="stat"><div class="num">{{ stats.scrape_count }}</div><div class="lbl">Scrapes</div></div>
+                <div class="stat"><div class="num">{{ stats.export_count }}</div><div class="lbl">Exports</div></div>
+            </div>
+            {% if stats.recent_scrapes %}
+            <details open style="margin-top:14px;">
+                <summary>Recent scrapes</summary>
+                <div class="scroll-x">
+                <table>
+                    <tr><th>Time</th><th>Niche</th><th>City</th><th>State</th><th>Added</th></tr>
+                    {% for s in stats.recent_scrapes %}
+                    <tr>
+                        <td>{{ s.timestamp[:16] }}</td>
+                        <td>{{ s.niche }}</td>
+                        <td>{{ s.city }}</td>
+                        <td>{{ s.state }}</td>
+                        <td>{{ s.added }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                </div>
+            </details>
+            {% endif %}
+        </section>
 
-    <h2>Actions</h2>
-    <form action="/run" method="post">
-        <input type="text" name="name" placeholder="Campaign name" required>
-        <input type="text" name="project" placeholder="Project" required>
-        <button type="submit">Create Campaign</button>
-    </form>
-    <form action="/add_lead" method="post">
-        <input type="text" name="name" placeholder="Name" required>
-        <input type="text" name="email" placeholder="Email" required>
-        <input type="text" name="niche" placeholder="Niche" required>
-        <button type="submit">Add Lead</button>
-    </form>
-    <form action="/send" method="post"><button class="action-btn" type="submit">Send Batch</button></form>
-    <form action="/analyze" method="post"><button class="action-btn" type="submit">Analyze</button></form>
+        <section class="section" id="cheatsheet">
+            <h2>Jay Cheat Sheet</h2>
+            <details>
+                <summary><strong>What everything means (click to expand)</strong></summary>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin-top:12px; font-size:13px;">
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Campaign</h4>
+                        <p style="margin:0; color:var(--muted);">A named bucket of leads you're working. Tie one campaign to one offer (e.g. "BookerMove – Movers VA"). You can have many campaigns going at once but only one is ACTIVE — new scrapes/leads attach to it.</p>
+                    </div>
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Niche</h4>
+                        <p style="margin:0; color:var(--muted);">The business type you're targeting (movers, roofers, med spas, etc.). Pick from the preset list or type your own. The scraper searches DuckDuckGo for "{niche} in {city}, {state}".</p>
+                    </div>
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Lead Status</h4>
+                        <p style="margin:0; color:var(--muted);"><span class="status-NEW">NEW</span> = scraped, never contacted. <span class="status-CONTACTED">SENT/CONTACTED</span> = email went out. <span class="status-RETRY">RETRY</span> = transient SMTP failure (421/450/451/452) — will auto-reset to NEW after cooldown. <span class="status-FAILED">FAILED</span> = permanent failure or {{ max_retries }} retries used up. REPLIED = manual flag.</p>
+                    </div>
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Email Templates</h4>
+                        <p style="margin:0; color:var(--muted);">Reusable subject + body with merge fields like <code>{{ "{{business_name}}" }}</code>, <code>{{ "{{city}}" }}</code>, <code>{{ "{{owner}}" }}</code>. Click "Preview" on any template to see exactly what gets sent. Single-brace syntax also works.</p>
+                    </div>
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Call vs Email</h4>
+                        <p style="margin:0; color:var(--muted);">Lead has email → cold email first (cheap, scalable, fast feedback). Phone-only lead → call. If a lead has both, email gives you context for the call.</p>
+                    </div>
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Retry</h4>
+                        <p style="margin:0; color:var(--muted);">A RETRY lead waits {{ cooldown_minutes }} minutes (cooldown), then "Reset Eligible" flips it back to NEW so the next batch will try again. After {{ max_retries }} retries it auto-FAILS.</p>
+                    </div>
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Dry Run</h4>
+                        <p style="margin:0; color:var(--muted);">Send Batch with "dry run" checked = goes through every step except the SMTP call. Marks leads CONTACTED locally so you can preview the workflow without burning real outreach.</p>
+                    </div>
+                    <div>
+                        <h4 style="margin:0 0 4px; color:var(--accent);">Daily Cap</h4>
+                        <p style="margin:0; color:var(--muted);">Hard limit of {{ daily_cap }} real sends/day. Today's count comes from the activity log. When the cap hits, /send refuses with a BLOCKED message. Dry-runs bypass.</p>
+                    </div>
+                </div>
+            </details>
+        </section>
 
-    <form action="/log" method="post" style="margin-top:10px;">
-        <input type="number" name="count" placeholder="Sends" style="width:60px" required>
-        <input type="number" name="opens" placeholder="Opens" style="width:60px" value="0">
-        <input type="number" name="replies" placeholder="Replies" style="width:60px" value="0">
-        <input type="number" name="signups" placeholder="Signups" style="width:60px" value="0">
-        <button type="submit">Log</button>
-    </form>
+        <section class="section" id="scrape">
+            <h2>Find Leads</h2>
+            <form action="/scrape" method="post" id="scrape-form">
+                <div class="row" style="margin-bottom:8px;">
+                    <input list="niche-options" type="text" name="niche" id="scrape-niche" placeholder="niche (movers, roofers, ...)" required class="grow">
+                    <datalist id="niche-options">
+                        {% for n in templates.niche_presets %}<option value="{{ n }}">{% endfor %}
+                    </datalist>
+                    <input type="text" name="city" id="scrape-city" placeholder="city" required class="grow">
+                    <input type="text" name="state" id="scrape-state" placeholder="state" required style="width:80px;">
+                    <input type="number" name="max_results" placeholder="max" value="20" style="width:80px;">
+                    <button type="submit">Run Scrape</button>
+                </div>
+                <div class="row" style="font-size:11px;">
+                    <span style="color:var(--muted); margin-right:6px;">niche:</span>
+                    {% for n in templates.niche_presets %}
+                    <button type="button" class="btn muted preset-niche" data-val="{{ n }}" style="font-size:11px; padding:3px 8px;">{{ n }}</button>
+                    {% endfor %}
+                </div>
+                <div class="row" style="font-size:11px; margin-top:4px;">
+                    <span style="color:var(--muted); margin-right:6px;">location:</span>
+                    {% for loc in templates.location_presets %}
+                    <button type="button" class="btn muted preset-loc" data-city="{{ loc.city }}" data-state="{{ loc.state }}" style="font-size:11px; padding:3px 8px;">{{ loc.city }}, {{ loc.state }}</button>
+                    {% endfor %}
+                </div>
+            </form>
+            <p style="color:var(--muted); font-size:12px; margin:10px 0 0;">Tip: location expansion goes <em>narrow → wide</em> (Colonial Heights → Petersburg → Chesterfield → Richmond → Virginia → USA). Scraper does not fake geographic precision; broaden when narrow yields few results.</p>
+        </section>
 
-    <h2>Campaigns ({{ campaigns|length }})</h2>
-    <table>
-        <tr><th>ID</th><th>Name</th><th>Project</th><th>Status</th><th>Sends</th><th>Open%</th><th>Replies</th><th>Signups</th><th>Verdict</th><th>Next</th></tr>
-        {% for c in campaigns %}
-        <tr>
-            <td>{{ c.id }}</td>
-            <td>{{ c.name }}</td>
-            <td>{{ c.project }}</td>
-            <td class="status-{{ c.status }}">{{ c.status }}</td>
-            <td>{{ c.sends }}</td>
-            <td>{{ c.open_rate }}%</td>
-            <td>{{ c.replies }}</td>
-            <td>{{ c.signups }}</td>
-            <td class="verdict-{{ c.verdict }}">{{ c.verdict }}</td>
-            <td>{{ c.next }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+        <section class="section" id="campaigns">
+            <h2>Campaigns <a class="btn muted" href="/export/campaigns.csv" style="float:right;">Export CSV</a></h2>
+            <form action="/run" method="post" class="row" style="margin-bottom:14px;">
+                <input list="preset-options" type="text" name="name" placeholder="campaign name" required class="grow">
+                <datalist id="preset-options">
+                    {% for p in templates.campaign_presets %}<option value="{{ p.name }}">{% endfor %}
+                </datalist>
+                <input type="text" name="project" placeholder="project" required class="grow">
+                <button type="submit">Create Campaign</button>
+            </form>
+            <div class="campaign-grid">
+                {% for c in campaigns %}
+                {% set b = breakdown.get(c.id, {'total':0,'NEW':0,'SENT':0,'RETRY':0,'FAILED':0,'REPLIED':0,'daily_cap_remaining':daily_cap,'last_scrape':None}) %}
+                <div class="campaign-card">
+                    <div class="card-head">
+                        <div>
+                            <strong>{{ c.name }}</strong>
+                            <span class="pill">{{ c.id }}</span>
+                        </div>
+                        <div>
+                            <span class="pill status-{{ c.status }}">{{ c.status }}</span>
+                            <span class="pill verdict-{{ c.verdict }}">{{ c.verdict }}</span>
+                        </div>
+                    </div>
+                    <div class="card-meta">
+                        <span class="pill" style="color:var(--muted);">{{ c.project }}</span>
+                        <span class="pill" style="color:var(--muted);">next: {{ c.next }}</span>
+                        <span class="pill" style="color:var(--muted);">last: {{ c.last_action or '—' }}</span>
+                    </div>
+                    <div class="card-stats">
+                        <div><b>{{ b.total }}</b><span class="lbl">total</span></div>
+                        <div class="status-NEW"><b>{{ b.NEW }}</b><span class="lbl">NEW</span></div>
+                        <div class="status-CONTACTED"><b>{{ b.SENT }}</b><span class="lbl">SENT</span></div>
+                        <div class="status-RETRY"><b>{{ b.RETRY }}</b><span class="lbl">RETRY</span></div>
+                        <div class="status-FAILED"><b>{{ b.FAILED }}</b><span class="lbl">FAILED</span></div>
+                        <div><b>{{ b.REPLIED }}</b><span class="lbl">REPLIED</span></div>
+                        <div><b>{{ b.daily_cap_remaining }}/{{ daily_cap }}</b><span class="lbl">cap left</span></div>
+                        <div style="font-size:11px;"><b style="font-size:11px;">{{ (b.last_scrape or '—')[:16] }}</b><span class="lbl">last scrape</span></div>
+                    </div>
+                    <div class="card-actions">
+                        <a class="btn muted" href="/export/leads.csv?campaign_id={{ c.id }}">Export CSV</a>
+                        {% if c.status != "ARCHIVED" %}
+                        <form action="/campaign/{{ c.id }}/archive" method="post" class="inline">
+                            <button type="submit" class="danger">Archive</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div style="margin-top:12px;" class="row">
+                <form action="/send" method="post" class="row">
+                    <button type="submit">Send Batch</button>
+                    <label style="font-size:12px;color:var(--muted);"><input type="checkbox" name="dry_run" value="1"> dry run</label>
+                </form>
+                <form action="/analyze" method="post" class="inline">
+                    <button type="submit" class="muted">Analyze Active</button>
+                </form>
+                <form action="/log" method="post" class="row">
+                    <input type="number" name="count" placeholder="sends" style="width:70px" required>
+                    <input type="number" name="opens" placeholder="opens" style="width:70px" value="0">
+                    <input type="number" name="replies" placeholder="replies" style="width:70px" value="0">
+                    <input type="number" name="signups" placeholder="signups" style="width:70px" value="0">
+                    <button type="submit" class="muted">Log</button>
+                </form>
+            </div>
+        </section>
 
-    <h2>Leads ({{ leads|length }})</h2>
-    <table>
-        <tr><th>ID</th><th>Name</th><th>Email</th><th>Niche</th><th>Status</th></tr>
-        {% for l in leads %}
-        <tr>
-            <td>{{ l.id }}</td>
-            <td>{{ l.name }}</td>
-            <td>{{ l.email }}</td>
-            <td>{{ l.niche }}</td>
-            <td>{{ l.status }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+        <section class="section" id="retry">
+            <h2>Retry Queue</h2>
+            <div class="row" style="gap:14px;">
+                <div class="stat" style="flex:0 0 auto;">
+                    <div class="num">{{ retry_eligible }}</div>
+                    <div class="lbl">eligible now</div>
+                </div>
+                <div class="stat" style="flex:0 0 auto;">
+                    <div class="num">{{ stats.leads_total - stats.leads_contacted }}</div>
+                    <div class="lbl">awaiting outreach</div>
+                </div>
+                <div class="stat" style="flex:0 0 auto;">
+                    <div class="num">{{ daily_cap }}</div>
+                    <div class="lbl">daily cap</div>
+                </div>
+                <div class="grow"></div>
+                <form action="/retry/run" method="post" class="row">
+                    <input type="number" name="cooldown_minutes" value="{{ cooldown_minutes }}" min="0" style="width:80px;" title="cooldown minutes">
+                    <button type="submit" {% if not retry_eligible %}class="muted"{% endif %}>Reset Eligible RETRY → NEW</button>
+                </form>
+            </div>
+            <p style="color:var(--muted); font-size:12px; margin:8px 0 0;">Resets RETRY leads back to NEW so the next batch retries them. Skips leads still within cooldown ({{ cooldown_minutes }}m), leads at {{ max_retries }} retry cap, and respects the daily send cap.</p>
+        </section>
 
-    <h2>Log (last 10)</h2>
-    <table>
-        <tr><th>Time</th><th>Campaign</th><th>Sends</th><th>Opens</th><th>Replies</th><th>Signups</th></tr>
-        {% for e in log[-10:]|reverse %}
-        <tr>
-            <td>{{ e.timestamp[:16] }}</td>
-            <td>{{ e.campaign_id }}</td>
-            <td>{{ e.sends }}</td>
-            <td>{{ e.opens }}</td>
-            <td>{{ e.replies }}</td>
-            <td>{{ e.signups }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+        <section class="section" id="leads">
+            <h2>Leads ({{ leads|length }}) <a class="btn muted" href="/export/leads.csv" style="float:right;">Export CSV</a></h2>
+            <form action="/add_lead" method="post" class="row" style="margin-bottom:12px;">
+                <input type="text" name="name" placeholder="name" required>
+                <input type="email" name="email" placeholder="email" required>
+                <input list="niche-options" type="text" name="niche" placeholder="niche" required>
+                <button type="submit">Add Lead</button>
+            </form>
+            <div class="row" style="margin-bottom:10px;">
+                <input type="text" id="lead-search" placeholder="search name / email / city..." class="grow">
+                <select id="filter-status">
+                    <option value="">all statuses</option>
+                    <option value="NEW">NEW</option>
+                    <option value="CONTACTED">CONTACTED</option>
+                    <option value="RETRY">RETRY</option>
+                    <option value="FAILED">FAILED</option>
+                    <option value="ARCHIVED">ARCHIVED</option>
+                </select>
+                <select id="filter-niche">
+                    <option value="">all niches</option>
+                    {% for n in niches %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                </select>
+                <select id="filter-contact">
+                    <option value="">any contact</option>
+                    <option value="email">has email</option>
+                    <option value="phone">has phone</option>
+                    <option value="both">both</option>
+                </select>
+                <span id="lead-count" class="pill">{{ leads|length }} shown</span>
+            </div>
+            <div class="scroll-x">
+            <table id="leads-table">
+                <tr>
+                    <th>ID</th><th>Business</th><th>Owner</th><th>Email</th><th>Phone</th>
+                    <th>Website</th><th>City</th><th>Niche</th><th>Status</th><th>Retries</th>
+                    <th>Campaign</th><th>Source</th><th>Actions</th>
+                </tr>
+                {% for l in leads %}
+                <tr data-status="{{ l.status }}" data-niche="{{ l.niche or '' }}" data-contact="{{ l.contact_type or '' }}"
+                    data-search="{{ (l.name or '')|lower }} {{ (l.email or '')|lower }} {{ (l.city or '')|lower }} {{ (l.owner or '')|lower }}">
+                    <td>{{ l.id }}</td>
+                    <td>{{ l.name }}</td>
+                    <td>{{ l.owner or '' }}</td>
+                    <td>
+                        {% if l.email %}{{ l.email }}
+                        <button type="button" class="btn muted copy-btn" data-copy="{{ l.email }}" title="Copy email">⧉</button>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if l.phone %}{{ l.phone }}
+                        <button type="button" class="btn muted copy-btn" data-copy="{{ l.phone }}" title="Copy phone">⧉</button>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if l.website %}<a href="{{ l.website }}" target="_blank" rel="noopener" style="color:var(--link); font-size:11px;">open ↗</a>{% endif %}
+                    </td>
+                    <td>{{ l.city or '' }}{% if l.state %}, {{ l.state }}{% endif %}</td>
+                    <td>{{ l.niche }}</td>
+                    <td class="status-{{ l.status }}">{{ l.status }}</td>
+                    <td style="text-align:center;">{{ l.retry_count or 0 }}</td>
+                    <td>{{ l.campaign_id or '-' }}</td>
+                    <td style="font-size:11px;">{{ l.source or '-' }}</td>
+                    <td>
+                        {% if l.status == "RETRY" %}
+                        <form action="/lead/{{ l.id }}/reset" method="post" class="inline">
+                            <button type="submit" class="muted" title="reset to NEW">↻ Retry</button>
+                        </form>
+                        {% endif %}
+                        {% if l.status != "CONTACTED" and l.status != "ARCHIVED" %}
+                        <form action="/lead/{{ l.id }}/contact" method="post" class="inline">
+                            <button type="submit" class="muted">Mark SENT</button>
+                        </form>
+                        {% endif %}
+                        {% if l.status != "ARCHIVED" %}
+                        <form action="/lead/{{ l.id }}/archive" method="post" class="inline">
+                            <button type="submit" class="danger">Archive</button>
+                        </form>
+                        {% else %}
+                        <form action="/lead/{{ l.id }}/reset" method="post" class="inline">
+                            <button type="submit" class="muted">Restore</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </section>
+
+        <section class="section" id="templates">
+            <h2>Templates</h2>
+            <h3 style="font-size:12px; color:var(--muted); margin:0 0 8px;">OUTREACH</h3>
+            {% for t in templates.outreach %}
+            <details>
+                <summary><strong>{{ t.name }}</strong> <span class="pill">{{ t.id }}</span></summary>
+                <p style="margin:6px 0; font-size:12px;"><strong>Subject:</strong> {{ t.subject }}</p>
+                <pre style="background:var(--panel2); padding:10px; border-radius:4px; white-space:pre-wrap; font-size:12px;">{{ t.body }}</pre>
+                <div class="row" style="margin-top:6px;">
+                    <button type="button" class="btn muted preview-btn" data-tpl="{{ t.id }}">Preview with first lead</button>
+                    <span style="font-size:11px; color:var(--muted);">no auto-send — preview only</span>
+                </div>
+                <div class="preview-out" id="preview-{{ t.id }}"></div>
+            </details>
+            {% endfor %}
+            <details style="margin-top:12px;">
+                <summary>+ Add outreach template</summary>
+                <form action="/template/add" method="post" style="margin-top:10px;">
+                    <div class="row" style="margin-bottom:6px;">
+                        <input type="text" name="name" placeholder="template name" required class="grow">
+                        <input type="text" name="subject" placeholder="subject" required class="grow">
+                    </div>
+                    <textarea name="body" placeholder="body — use {business_name}, {city}, {sender_name}" required></textarea>
+                    <button type="submit" style="margin-top:8px;">Save Template</button>
+                </form>
+            </details>
+            <h3 style="font-size:12px; color:var(--muted); margin:14px 0 6px;">CAMPAIGN PRESETS</h3>
+            <div class="row">
+                {% for p in templates.campaign_presets %}
+                <span class="pill">{{ p.name }} / {{ p.project }}</span>
+                {% endfor %}
+            </div>
+            <h3 style="font-size:12px; color:var(--muted); margin:14px 0 6px;">NICHE PRESETS</h3>
+            <div class="row">
+                {% for n in templates.niche_presets %}<span class="pill">{{ n }}</span>{% endfor %}
+            </div>
+        </section>
+
+        <section class="section" id="activity">
+            <h2>Activity Log</h2>
+            <div class="scroll-x">
+            <table>
+                <tr><th>Time</th><th>Action</th><th>Details</th></tr>
+                {% for e in log[-30:]|reverse %}
+                <tr>
+                    <td style="white-space:nowrap;">{{ e.timestamp[:16] }}</td>
+                    <td>{{ e.action or 'log' }}</td>
+                    <td style="font-size:12px; color:var(--muted);">
+                        {% for k, v in e.items() if k not in ['timestamp', 'action'] %}
+                        <span class="pill">{{ k }}={{ v }}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Lead table filtering
+        (function() {
+            const search = document.getElementById('lead-search');
+            const status = document.getElementById('filter-status');
+            const niche = document.getElementById('filter-niche');
+            const contact = document.getElementById('filter-contact');
+            const rows = document.querySelectorAll('#leads-table tr[data-status]');
+            const count = document.getElementById('lead-count');
+
+            function apply() {
+                const q = search.value.toLowerCase().trim();
+                const s = status.value;
+                const n = niche.value;
+                const c = contact.value;
+                let shown = 0;
+                rows.forEach(r => {
+                    let visible = true;
+                    if (s && r.dataset.status !== s) visible = false;
+                    if (n && r.dataset.niche !== n) visible = false;
+                    if (c && r.dataset.contact !== c) visible = false;
+                    if (q && !r.dataset.search.includes(q)) visible = false;
+                    r.style.display = visible ? '' : 'none';
+                    if (visible) shown++;
+                });
+                count.textContent = shown + ' shown';
+            }
+            [search, status, niche, contact].forEach(el => {
+                el.addEventListener('input', apply);
+                el.addEventListener('change', apply);
+            });
+        })();
+
+        // Niche / location preset chips
+        document.querySelectorAll('.preset-niche').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('scrape-niche').value = btn.dataset.val;
+            });
+        });
+        document.querySelectorAll('.preset-loc').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('scrape-city').value = btn.dataset.city;
+                document.getElementById('scrape-state').value = btn.dataset.state;
+            });
+        });
+
+        // Copy buttons
+        document.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const val = btn.dataset.copy;
+                try {
+                    await navigator.clipboard.writeText(val);
+                    const orig = btn.textContent;
+                    btn.textContent = '✓';
+                    setTimeout(() => { btn.textContent = orig; }, 800);
+                } catch (e) {
+                    // fallback
+                    const ta = document.createElement('textarea');
+                    ta.value = val; document.body.appendChild(ta); ta.select();
+                    document.execCommand('copy'); document.body.removeChild(ta);
+                    btn.textContent = '✓'; setTimeout(() => { btn.textContent = '⧉'; }, 800);
+                }
+            });
+        });
+
+        // Template preview
+        document.querySelectorAll('.preview-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const tpl = btn.dataset.tpl;
+                const out = document.getElementById('preview-' + tpl);
+                out.classList.add('show');
+                out.textContent = 'loading...';
+                // Pick first lead id if any
+                const firstLeadRow = document.querySelector('#leads-table tr[data-status]');
+                const leadId = firstLeadRow ? firstLeadRow.children[0].textContent.trim() : '';
+                const url = '/template/preview/' + encodeURIComponent(tpl) + (leadId ? '?lead_id=' + encodeURIComponent(leadId) : '');
+                try {
+                    const r = await fetch(url);
+                    const j = await r.json();
+                    if (j.error) { out.textContent = 'Error: ' + j.error; return; }
+                    out.textContent = 'Subject: ' + j.subject + '\n\n' + j.body
+                        + '\n\n— previewing template "' + j.template_name + '"'
+                        + (j.lead_id ? ' against lead ' + j.lead_id : ' (sample lead)');
+                } catch (e) {
+                    out.textContent = 'Preview failed: ' + e.message;
+                }
+            });
+        });
+    </script>
 </body>
 </html>
