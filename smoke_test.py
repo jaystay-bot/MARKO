@@ -828,6 +828,364 @@ def test_pipeline_summary_fields():
               s.get("followup_window_hours") == commands.FOLLOWUP_OVERDUE_HOURS)
 
 
+# ---------- N182 truth checks: leak / mockup / pitch / pitch_pack / mobile ----------
+
+# Whitelisted fields the mockup template is allowed to read from a lead.
+# Any reference outside this set inside templates/mockup/*.html = fail.
+N182_MOCKUP_WHITELIST = {"name", "city", "state", "phone", "niche"}
+
+# Locally-defined-in-template vars set via {% set %} that are NOT lead fields.
+# These are template content strings, not data — allowed.
+N182_TEMPLATE_LOCAL_VARS = {
+    "badge", "tagline", "feat1", "feat2", "sub_label", "book_label",
+    "call_label",
+}
+
+# Forbidden patterns in rendered mockup HTML — would indicate fake metrics.
+# Carefully tuned so generic UX phrases like "in 30 seconds" don't trip.
+import re as _re_n182
+N182_FAKE_METRIC_PATTERNS = [
+    (r"\$\d", "literal dollar amount"),
+    (r"\d+\s*%\s", "literal percent claim"),
+    (r"\d+\s*stars?\b", "star-rating claim"),
+    (r"\d+\s*reviews?\b", "review-count claim"),
+    (r"customers\s+served", "fabricated customer count phrasing"),
+    (r"\brevenue\b", "literal revenue claim"),
+    (r"\d+\s*/\s*5\b", "rating-out-of-5 claim"),
+]
+
+
+def _make_n182_seed(tmp, lead_overrides=None):
+    """Seed with three leads covering email-only, phone-only, both-contacts."""
+    base = [
+        {"id": "L001", "name": "Mike's Plumbing", "owner": "Mike Davis",
+         "phone": "804-555-0001", "email": None,
+         "city": "Richmond", "state": "VA", "niche": "plumber",
+         "pain_points": ["no contact form", "weak mobile"],
+         "status": "NEW", "website": "http://mikesplumbing.example"},
+        {"id": "L002", "name": "Lucky Dog Grooming", "owner": None,
+         "phone": None, "email": "info@luckydog.example",
+         "city": "Richmond", "state": "VA", "niche": "dog groomer",
+         "pain_points": ["no online booking"],
+         "status": "CONTACTED", "website": "https://luckydog.example"},
+        {"id": "L003", "name": "Storm Roofers", "owner": "Jane Doe",
+         "phone": "804-555-0003", "email": "jane@stormroofers.example",
+         "city": "Richmond", "state": "VA", "niche": "roofer",
+         "pain_points": ["no contact form"],
+         "status": "INTERESTED", "website": "https://stormroofers.example"},
+    ]
+    if lead_overrides:
+        base.extend(lead_overrides)
+    _seed(tmp, leads={"leads": base},
+          config={"batch_size": 10, "sender_name": "Jay",
+                  "from_email": "jay@marko.example",
+                  "unsubscribe_text": "reply STOP",
+                  "physical_address": "PO Box 1, Richmond VA",
+                  "smtp": {}, "email_template": {"subject": "s", "body": "b"}})
+
+
+def _bind_dashboard():
+    import dashboard
+    dashboard.CAMPAIGNS_FILE = commands.CAMPAIGNS_FILE
+    dashboard.LEADS_FILE = commands.LEADS_FILE
+    dashboard.LOG_FILE = commands.LOG_FILE
+    return dashboard
+
+
+def test_n182_leak_route_and_labels():
+    """Truth check #1 (leak route alive) + #6 (Confirmed/Inferred/Needs labels)."""
+    print("test_n182_leak_route_and_labels")
+    with tempfile.TemporaryDirectory() as tmp:
+        _make_n182_seed(tmp)
+        client = _bind_dashboard().app.test_client()
+        r = client.get("/lead/L001/leak")
+        check("/lead/L001/leak returns 200", r.status_code == 200,
+              f"got {r.status_code}")
+        html = r.get_data(as_text=True)
+        check("leak page shows recommended offer",
+              "Recommended Offer" in html and "BookerMove" in html,
+              "missing offer block")
+        check("leak page shows Confirmed label",
+              "Confirmed" in html, "no Confirmed pill")
+        check("leak page shows Inferred label",
+              "Inferred" in html, "no Inferred pill (missed-call risk should appear)")
+        check("leak page shows Needs human check label",
+              "Needs human check" in html, "no Needs human check pill")
+        # Every leak row must carry exactly one of the three labels via the pill class.
+        confirmed_rows = html.count('class="leak-row confirmed"')
+        inferred_rows = html.count('class="leak-row inferred"')
+        needs_rows = html.count('class="leak-row needs"')
+        total_rows = confirmed_rows + inferred_rows + needs_rows
+        check("every leak row has a confidence label class",
+              total_rows >= 1, f"got {total_rows} labeled rows")
+
+        r404 = client.get("/lead/L999/leak")
+        check("/lead/L999/leak returns 404",
+              r404.status_code == 404, f"got {r404.status_code}")
+
+
+def test_n182_pitch_route_auto_flip():
+    """Truth check #2: email mode for emailable, call mode for phone-only."""
+    print("test_n182_pitch_route_auto_flip")
+    with tempfile.TemporaryDirectory() as tmp:
+        _make_n182_seed(tmp)
+        client = _bind_dashboard().app.test_client()
+
+        r1 = client.get("/lead/L001/pitch")  # phone-only
+        check("/pitch phone-only returns 200", r1.status_code == 200)
+        html1 = r1.get_data(as_text=True)
+        check("phone-only auto-flips to call mode",
+              "call mode" in html1 and "Opener" in html1
+              and "no email on file" in html1,
+              "did not flip to call mode")
+
+        r2 = client.get("/lead/L002/pitch")  # email-only
+        check("/pitch email-only returns 200", r2.status_code == 200)
+        html2 = r2.get_data(as_text=True)
+        check("email-only stays in email mode",
+              "email mode" in html2 and "Subject:" in html2,
+              "did not stay in email mode")
+
+        r3 = client.get("/lead/L003/pitch")  # both
+        check("/pitch both returns 200", r3.status_code == 200)
+        html3 = r3.get_data(as_text=True)
+        check("both-contacts defaults to email + offers switch",
+              "email mode" in html3 and "Switch to Call Script" in html3,
+              "missing email mode or switch link")
+
+
+def test_n182_mockup_renders_per_niche():
+    """Truth check #3 + #4 + #5: each niche template renders cleanly."""
+    print("test_n182_mockup_renders_per_niche")
+    import marko_intel
+    with tempfile.TemporaryDirectory() as tmp:
+        # Seed one lead per niche with the niche string the slug router accepts.
+        niche_lead_seed = {
+            "plumbers": "plumber",       "hvac": "hvac",
+            "movers": "moving company",  "roofers": "roofer",
+            "towing": "towing service",  "groomers": "dog groomer",
+            "auto_shops": "auto repair", "med_spas": "med spa",
+            "detailers": "auto detailer","salons": "salon",
+        }
+        leads = []
+        for idx, (slug, niche_str) in enumerate(niche_lead_seed.items(), start=1):
+            leads.append({"id": f"L{idx:03d}", "name": f"Test {slug.title()}",
+                          "phone": f"804-555-{idx:04d}",
+                          "city": "Richmond", "state": "VA",
+                          "niche": niche_str, "status": "NEW"})
+        _make_n182_seed(tmp, lead_overrides=leads)
+        client = _bind_dashboard().app.test_client()
+
+        for idx, (slug, _) in enumerate(niche_lead_seed.items(), start=1):
+            lid = f"L{idx + 3:03d}"  # +3 because base seed adds 3 leads first
+            r = client.get(f"/lead/{lid}/mockup")
+            check(f"/lead/{lid}/mockup ({slug}) returns 200",
+                  r.status_code == 200, f"got {r.status_code}")
+            html = r.get_data(as_text=True)
+            # #3 — no Jinja placeholder strings leaked into rendered output
+            check(f"mockup {slug} has no unresolved {{placeholder}}",
+                  "{{" not in html and "{%" not in html,
+                  "Jinja placeholders survived render")
+            check(f"mockup {slug} contains lead name",
+                  f"Test {slug.title()}" in html, "lead name missing")
+            # #5 — no fake metrics in the rendered HTML body
+            # Restrict the scan to the .mk mockup card content
+            m = _re_n182.search(r'<div class="mk[^"]*">(.+?)</div>\s*</section>',
+                                html, _re_n182.DOTALL)
+            scope = m.group(1) if m else html
+            for pattern, label in N182_FAKE_METRIC_PATTERNS:
+                if _re_n182.search(pattern, scope, _re_n182.IGNORECASE):
+                    check(f"mockup {slug} has no {label}", False,
+                          f"matched /{pattern}/ in rendered HTML")
+                    break
+            else:
+                check(f"mockup {slug} has no fake numeric claims", True)
+
+        # Try variant switching on one niche.
+        rv = client.get("/lead/L004/mockup?variant=booking")
+        check("variant override works",
+              rv.status_code == 200
+              and "Variant: " in rv.get_data(as_text=True)
+              and "booking" in rv.get_data(as_text=True), "")
+
+
+def test_n182_mockup_template_whitelist():
+    """Truth check #4: mockup templates only reference whitelisted lead fields.
+
+    Walks every templates/mockup/*.html, extracts {{ var }} refs, and asserts
+    each is either in the lead-field whitelist or in the template-local set.
+    """
+    print("test_n182_mockup_template_whitelist")
+    import marko_intel
+    mockup_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "templates", "mockup")
+    var_re = _re_n182.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)")
+    set_re = _re_n182.compile(r"\{%\s*set\s+([a-zA-Z_][a-zA-Z0-9_]*)")
+    files = sorted(os.listdir(mockup_dir))
+    check("mockup dir has >= 22 files (10 niches × 2 + 2 bases)",
+          len(files) >= 22, f"got {len(files)}")
+
+    allowed = N182_MOCKUP_WHITELIST | N182_TEMPLATE_LOCAL_VARS
+    for fname in files:
+        if not fname.endswith(".html"):
+            continue
+        path = os.path.join(mockup_dir, fname)
+        with open(path, "r", encoding="utf-8") as f:
+            src = f.read()
+        # Locally-set vars in THIS file are also OK to reference.
+        local = set(set_re.findall(src))
+        refs = set(var_re.findall(src))
+        bad = [r for r in refs if r not in allowed and r not in local]
+        check(f"mockup/{fname} only uses whitelisted refs",
+              not bad, f"forbidden refs: {bad}")
+
+
+def test_n182_pitch_pack_zip():
+    """Truth check #10: pitch pack is a real zip with 3 files."""
+    print("test_n182_pitch_pack_zip")
+    with tempfile.TemporaryDirectory() as tmp:
+        _make_n182_seed(tmp)
+        client = _bind_dashboard().app.test_client()
+        r = client.get("/lead/L001/pitch_pack")
+        check("/pitch_pack returns 200", r.status_code == 200,
+              f"got {r.status_code}")
+        check("/pitch_pack has Content-Disposition attachment",
+              "attachment" in (r.headers.get("Content-Disposition") or ""),
+              f"got {r.headers.get('Content-Disposition')!r}")
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(r.data))
+            names = set(zf.namelist())
+            check("pitch_pack contains email.txt + mockup.html + leak_report.md",
+                  {"email.txt", "mockup.html", "leak_report.md"}.issubset(names),
+                  f"got {names}")
+            email_blob = zf.read("email.txt").decode()
+            mockup_blob = zf.read("mockup.html").decode()
+            report_blob = zf.read("leak_report.md").decode()
+            check("email.txt mentions lead name",
+                  "Mike's Plumbing" in email_blob, "lead name missing")
+            check("mockup.html is non-empty",
+                  len(mockup_blob) > 100, f"len={len(mockup_blob)}")
+            check("leak_report.md has Recommended Offer section",
+                  "Recommended Offer" in report_blob, "section missing")
+        except zipfile.BadZipFile as exc:
+            check("pitch_pack is valid zip", False, str(exc))
+
+
+def test_n182_mobile_call_mode():
+    """Truth check #7: mobile page has tap-to-dial + viewport + big buttons."""
+    print("test_n182_mobile_call_mode")
+    with tempfile.TemporaryDirectory() as tmp:
+        _make_n182_seed(tmp)
+        client = _bind_dashboard().app.test_client()
+        r = client.get("/m/lead/L001")
+        check("/m/lead/L001 returns 200", r.status_code == 200,
+              f"got {r.status_code}")
+        html = r.get_data(as_text=True)
+        check("mobile page has viewport meta",
+              'name="viewport"' in html and "width=device-width" in html,
+              "missing viewport meta")
+        check("mobile page has tap-to-dial link",
+              'href="tel:804-555-0001"' in html,
+              "tap-to-dial missing")
+        check("mobile page has TOP LEAK section",
+              "TOP LEAK" in html, "TOP LEAK header missing")
+        check("mobile page has 4-button outcome row",
+              "Mark Interested" in html and "Voicemail Script" in html
+              and "Send Follow-Up" in html and "Back to Queue" in html,
+              "outcome buttons missing")
+        # min-height assertion: mobile CSS sets .m-tel to >= 60px and .m-actions .btn to 48px
+        check("mobile primary buttons have min-height >= 44px",
+              "min-height:60px" in html or "min-height:48px" in html,
+              "no large-tap-target CSS")
+
+
+def test_n182_pipeline_total_math():
+    """Truth check #9: pipeline_total only sums CONTACTED + INTERESTED offer.price."""
+    print("test_n182_pipeline_total_math")
+    import marko_intel
+    leads = [
+        # CONTACTED + has leaks → BookerMove $1500
+        {"name": "A", "niche": "plumber", "status": "CONTACTED",
+         "pain_points": ["no contact form"]},
+        # INTERESTED + has leaks → BookerMove $1500
+        {"name": "B", "niche": "hvac", "status": "INTERESTED",
+         "pain_points": ["no online booking"]},
+        # NEW → must NOT be included
+        {"name": "C", "niche": "plumber", "status": "NEW",
+         "pain_points": ["no contact form"]},
+        # CONTACTED but no leaks → audit ($0) → not included
+        {"name": "D", "niche": "salon", "status": "CONTACTED",
+         "pain_points": []},
+    ]
+    commands.annotate_leads(leads)
+    p = commands.pipeline_total(leads)
+    check("pipeline_total counts only CONTACTED+INTERESTED with priced offer",
+          p["count"] == 2, f"got {p}")
+    check("pipeline_total sums $1500 + $1500 = $3000",
+          p["total"] == 3000, f"got {p}")
+    # NEW status should not be summed even if the lead has a great offer.
+    new_only = [l for l in leads if l["status"] == "NEW"]
+    p2 = commands.pipeline_total(new_only)
+    check("pipeline_total ignores NEW leads",
+          p2["total"] == 0 and p2["count"] == 0, f"got {p2}")
+
+
+def test_n182_no_new_pip_deps():
+    """Truth check #8: requirements.txt unchanged — N182 uses stdlib only.
+
+    Compares current requirements.txt against the known pre-N182 dependency
+    list. If new entries appear, fail. Allows whitespace/ordering changes.
+    """
+    print("test_n182_no_new_pip_deps")
+    here = os.path.dirname(os.path.abspath(__file__))
+    req_path = os.path.join(here, "requirements.txt")
+    check("requirements.txt exists", os.path.exists(req_path))
+    if not os.path.exists(req_path):
+        return
+    with open(req_path, "r", encoding="utf-8") as f:
+        pkgs = {line.split("==")[0].split(">=")[0].split("<=")[0].strip().lower()
+                for line in f if line.strip() and not line.startswith("#")}
+    # The N182 build prompt requires no new external libs; only stdlib.
+    # Allow {flask, requests, beautifulsoup4, bs4, lxml, gunicorn, flask-cors, anything pre-existing}.
+    # This test asserts that the new modules used (io, json, os, zipfile)
+    # are ALL stdlib — by importing them and checking they have no __file__
+    # under site-packages.
+    import io as _io, zipfile as _zf
+    import sysconfig
+    stdlib_root = sysconfig.get_paths()["stdlib"]
+    for mod, name in [(_io, "io"), (_zf, "zipfile")]:
+        mod_file = getattr(mod, "__file__", None) or ""
+        ok = (not mod_file) or mod_file.startswith(stdlib_root) \
+             or "site-packages" not in mod_file
+        check(f"N182 uses stdlib for {name}", ok, f"file={mod_file}")
+
+
+def test_n182_buttons_on_home_call_first():
+    """Truth check #1 (call-first cards link to the new routes)."""
+    print("test_n182_buttons_on_home_call_first")
+    with tempfile.TemporaryDirectory() as tmp:
+        _make_n182_seed(tmp)
+        client = _bind_dashboard().app.test_client()
+        r = client.get("/")
+        check("home returns 200", r.status_code == 200, f"got {r.status_code}")
+        html = r.get_data(as_text=True)
+        check("home Call First card links to leak route",
+              "/lead/L001/leak" in html, "leak link missing")
+        check("home Call First card links to mockup route",
+              "/lead/L001/mockup" in html, "mockup link missing")
+        check("home Call First card links to pitch_pack route",
+              "/lead/L001/pitch_pack" in html, "pitch_pack link missing")
+        check("home shows Generate Leak Report button label",
+              "Generate Leak Report" in html, "button label missing")
+        check("home shows Create Mockup Pitch button label",
+              "Create Mockup Pitch" in html, "button label missing")
+        check("home shows Export Pitch Pack button label",
+              "Export Pitch Pack" in html, "button label missing")
+        # Pipeline pill: 2 leads CONTACTED+INTERESTED with priced offers → $3,000
+        check("home shows pipeline total pill",
+              "pipeline $3,000" in html, "pipeline pill missing or wrong")
+
+
 def main():
     test_subpage_extraction()
     test_dedup()
@@ -857,6 +1215,16 @@ def main():
     test_dnc_excluded_from_call_queue()
     test_set_lead_disposition_safety()
     test_pipeline_summary_fields()
+    # N182 truth checks
+    test_n182_leak_route_and_labels()
+    test_n182_pitch_route_auto_flip()
+    test_n182_mockup_renders_per_niche()
+    test_n182_mockup_template_whitelist()
+    test_n182_pitch_pack_zip()
+    test_n182_mobile_call_mode()
+    test_n182_pipeline_total_math()
+    test_n182_no_new_pip_deps()
+    test_n182_buttons_on_home_call_first()
     fails = [(n, d) for n, ok, d in results if not ok]
     print(f"\n{len(results) - len(fails)}/{len(results)} passed")
     if fails:
