@@ -84,31 +84,44 @@
 
     {% if submitted_ok %}
       <div class="ok">
-        <strong>Got it.</strong> A local mover will contact you shortly using the phone or email you provided.
-        <div style="margin-top:8px; color:var(--muted); font-size:13px;">Reference: {{ lead_id }}</div>
+        <strong>Request received.</strong>
+        <div style="margin-top:6px;">
+          Thanks {{ submitted_name or '' }}. A local Virginia mover will reach
+          out to you by {{ submitted_via or 'phone or email' }} as soon as
+          possible. We do not require any account or call to follow up.
+        </div>
+        <div style="margin-top:10px; color:var(--muted); font-size:13px;">
+          Reference: {{ lead_id }}<br>
+          If you don't hear back within one business day, email
+          <a href="mailto:supportbookermove@gmail.com" style="color:var(--accent);">supportbookermove@gmail.com</a>
+          with this reference number.
+        </div>
       </div>
       <div class="foot"><a href="/quote" style="color:var(--accent);">Submit another request</a></div>
     {% else %}
       {% if errors %}
         <div class="errors">
-          <strong>Please fix the following:</strong>
+          <strong>We couldn't submit your request:</strong>
           <ul style="margin:6px 0 0 18px; padding:0;">
             {% for e in errors %}<li>{{ e }}</li>{% endfor %}
           </ul>
         </div>
       {% endif %}
-      <form method="POST" action="/quote" autocomplete="on">
+      <form method="POST" action="/quote" autocomplete="on" novalidate>
         <label class="req" for="customer_name">Your name</label>
         <input id="customer_name" name="customer_name" type="text" required value="{{ form.customer_name or '' }}">
 
+        <div style="font-size:13px; color:var(--muted); margin-top:14px;">
+          Provide phone or email so a local mover can reach you. Either is fine.
+        </div>
         <div class="row">
           <div>
-            <label class="req" for="phone">Phone</label>
-            <input id="phone" name="phone" type="tel" inputmode="tel" required value="{{ form.phone or '' }}">
+            <label for="phone">Phone</label>
+            <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ form.phone or '' }}">
           </div>
           <div>
             <label for="email">Email</label>
-            <input id="email" name="email" type="email" inputmode="email" value="{{ form.email or '' }}">
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" value="{{ form.email or '' }}">
           </div>
         </div>
 

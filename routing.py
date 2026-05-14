@@ -146,17 +146,22 @@ def estimate_lead_value(lead):
 def compute_lead_quality(lead):
     """Return 'HOT' | 'WARM' | 'COOL'. Pure function over lead fields.
 
-    HOT  = ASAP urgency + phone + email + named customer
-    WARM = this_week or this_month + phone present
-    COOL = everything else (still routed, just lower priority)
+    HOT  = ASAP urgency + named customer + (phone OR email)
+    WARM = this_week / this_month + named customer + (phone OR email)
+    COOL = everything else (still routed, still notified, lower priority)
+
+    Email-or-phone acceptance: a customer who only shares email is still
+    actionable -- the owner can reply by email. Don't downgrade quality
+    just because phone is missing.
     """
     name = (lead.get("customer_name") or "").strip()
     phone = (lead.get("phone") or "").strip()
     email = (lead.get("email") or "").strip()
     urgency = (lead.get("urgency") or "").strip().lower()
-    if urgency == "asap" and name and phone and email:
+    reachable = bool(phone or email)
+    if urgency == "asap" and name and reachable:
         return "HOT"
-    if urgency in ("this_week", "this_month") and phone and name:
+    if urgency in ("this_week", "this_month") and name and reachable:
         return "WARM"
     return "COOL"
 
@@ -241,9 +246,17 @@ def validate_lead(lead):
             errors.append(f"missing field: {k}")
     if errors:
         return False, errors
-    for k in ("customer_name", "phone", "pickup_zip", "move_date"):
+    for k in ("customer_name", "pickup_zip", "move_date"):
         if not lead[k]:
             errors.append(f"required field empty: {k}")
+    # N-OVERNIGHT-MONEY-SAFE-CAPTURE: phone OR email required (not both).
+    # Lets a customer submit with email only if they don't want to share a
+    # phone number. Owner notify can still reach them; the mover (when
+    # mover routing is enabled) gets whichever is provided.
+    phone = (lead.get("phone") or "").strip()
+    email = (lead.get("email") or "").strip()
+    if not phone and not email:
+        errors.append("at least one of phone or email is required")
     pickup = lead.get("pickup_zip") or ""
     if pickup and (len(pickup) != 5 or not pickup.isdigit()):
         errors.append("pickup_zip must be 5 digits")

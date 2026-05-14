@@ -311,6 +311,81 @@ def main():
         "/api/talkbot/inbound: HTTP path triggers owner notify"
     )
 
+    # --- Phone OR email accepted (not both required) ----------------
+    routing.email_client.send = _make_stub(
+        {"id": "stub-email-only", "status": "sent", "error": None}
+    )
+    try:
+        _SEND_CALLS.clear()
+        client = dashboard.app.test_client()
+        # Email-only submission, no phone
+        r = client.post("/quote", data={
+            "customer_name": "Email-Only Caller",
+            "phone": "",
+            "email": "emailonly@example.com",
+            "move_date": "2026-08-01",
+            "pickup_zip": "23230",
+            "dropoff_zip": "23114",
+            "home_size": "1 bedroom",
+            "stairs_elevator": "Ground floor",
+            "heavy_items": "",
+            "urgency": "asap",
+            "notes": "Email-only contact preference.",
+        })
+        assert_eq(r.status_code, 200, "email-only POST 200")
+        assert_true(b"Request received" in r.data, "email-only success page")
+        # Phone-only submission, no email
+        r = client.post("/quote", data={
+            "customer_name": "Phone-Only Caller",
+            "phone": "804-555-0211",
+            "email": "",
+            "move_date": "2026-08-02",
+            "pickup_zip": "23230",
+            "dropoff_zip": "23114",
+            "home_size": "Studio",
+            "stairs_elevator": "Ground floor",
+            "heavy_items": "",
+            "urgency": "this_week",
+            "notes": "Phone-only contact preference.",
+        })
+        assert_eq(r.status_code, 200, "phone-only POST 200")
+        # Neither phone nor email -> 400 with explicit error
+        r = client.post("/quote", data={
+            "customer_name": "No Contact Info",
+            "phone": "",
+            "email": "",
+            "move_date": "2026-08-03",
+            "pickup_zip": "23230",
+            "dropoff_zip": "23114",
+            "home_size": "Studio",
+            "stairs_elevator": "Ground floor",
+            "heavy_items": "",
+            "urgency": "flexible",
+            "notes": "No way to reach me.",
+        })
+        assert_eq(r.status_code, 400, "no contact info -> 400")
+        assert_true(b"phone or email" in r.data,
+                    "error mentions phone-or-email requirement")
+    finally:
+        routing.email_client.send = original_send
+    out["checks"].append("validate_lead: phone OR email (not both) accepted")
+
+    # --- Public-domain root redirects to /quote ---------------------
+    client = dashboard.app.test_client()
+    r = client.get("/", headers={"Host": "quote.bookermove.com"},
+                   follow_redirects=False)
+    assert_eq(r.status_code, 302, "quote.bookermove.com/ -> 302")
+    assert_true(r.headers.get("Location", "").endswith("/quote"),
+                "redirect target is /quote")
+    # Operator dashboard host is unaffected
+    r = client.get("/", headers={"Host": "marko-teal.vercel.app"},
+                   follow_redirects=False)
+    assert_true(r.status_code in (200, 500),
+                "operator host still serves dashboard (or its own error)")
+    out["checks"].append(
+        "public domain root: quote.bookermove.com/ -> /quote redirect"
+    )
+
     # --- No contract drift -------------------------------------------
     import bookermove_export
     snap = _read(os.path.join(ROOT, "_truth", "exports", "leads_export.json"))

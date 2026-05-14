@@ -19,6 +19,20 @@ app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# N-OVERNIGHT-MONEY-SAFE-CAPTURE: customers land on the bare public domain
+# expecting the intake form, not the operator dashboard. Redirect / to /quote
+# when the host is the public intake domain. Operator dashboard at
+# marko-teal.vercel.app/ and other hosts is unchanged.
+PUBLIC_INTAKE_HOSTS = {"quote.bookermove.com"}
+
+
+@app.before_request
+def _public_intake_root_redirect():
+    from flask import request as _req, redirect as _redirect
+    host = (_req.host or "").split(":", 1)[0].lower()
+    if host in PUBLIC_INTAKE_HOSTS and _req.path == "/":
+        return _redirect("/quote", code=302)
+
 
 # N261: Mockup catalog built once at import time from templates/mockup/*.
 # Acts as a whitelist so the /mockup route can't be tricked into rendering
@@ -1499,7 +1513,8 @@ def quote():
     """
     if request.method == "GET":
         return render_template("quote.html", submitted_ok=False, errors=None,
-                               form={}, lead_id=None)
+                               form={}, lead_id=None,
+                               submitted_name=None, submitted_via=None)
 
     form = {k: (request.form.get(k) or "") for k in (
         "customer_name", "phone", "email", "move_date",
@@ -1511,11 +1526,27 @@ def quote():
     result = routing.submit_quote(form, dry_run=not live)
 
     if not result["ok"]:
-        return render_template("quote.html", submitted_ok=False,
-                               errors=result["errors"], form=form, lead_id=None), 400
+        return render_template(
+            "quote.html", submitted_ok=False,
+            errors=result["errors"], form=form, lead_id=None,
+            submitted_name=None, submitted_via=None,
+        ), 400
 
-    return render_template("quote.html", submitted_ok=True, errors=None,
-                           form={}, lead_id=result["lead"]["lead_id"])
+    lead = result["lead"]
+    if lead.get("phone") and lead.get("email"):
+        via = "phone or email"
+    elif lead.get("phone"):
+        via = "phone"
+    elif lead.get("email"):
+        via = "email"
+    else:
+        via = None
+    return render_template(
+        "quote.html", submitted_ok=True, errors=None,
+        form={}, lead_id=lead["lead_id"],
+        submitted_name=(lead.get("customer_name") or "").split(" ", 1)[0],
+        submitted_via=via,
+    )
 
 
 @app.route("/admin/delivery", methods=["GET"])
