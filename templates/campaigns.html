@@ -1,0 +1,86 @@
+{% extends "_marko_shell.html" %}
+{% block title %}Campaigns · MARKO{% endblock %}
+{% block subtitle %}Niche presets, scrapes, exports.{% endblock %}
+
+{% block content %}
+  <h2 class="h2">Active</h2>
+  {% if active_campaigns %}
+    {% for c in active_campaigns %}
+      <div class="card" data-test="campaign-active">
+        <div class="row" style="display:flex;justify-content:space-between;align-items:baseline;">
+          <div class="title">{{ c.name or c.id }}</div>
+          <span class="pill GOOD">ACTIVE</span>
+        </div>
+        <div class="sub">
+          {{ c.niche or '—' }}{% if c.city %} · {{ c.city }}{% endif %}
+          {% if c.lead_count is defined %} · {{ c.lead_count }} leads{% endif %}
+        </div>
+        <div style="margin-top: 10px;">
+          <form method="POST" action="/campaign/{{ c.id }}/archive" style="display:inline;">
+            <button class="btn btn-sm btn-ghost" type="submit">Archive</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No active campaigns. Pick a preset below.</div>
+  {% endif %}
+
+  <h2 class="h2">Niche presets</h2>
+  {% if presets %}
+    {% for p in presets %}
+      <div class="card" data-test="campaign-preset">
+        <div class="row" style="display:flex;justify-content:space-between;align-items:baseline;">
+          <div>
+            <div class="title">{{ p.name or p.id }}</div>
+            <div class="sub">{{ p.niche or '—' }}{% if p.city %} · {{ p.city }}{% endif %}</div>
+          </div>
+          <form method="POST" action="/campaign/preset/{{ p.id }}">
+            <button class="btn btn-primary btn-sm" type="submit">Launch</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No presets defined.</div>
+  {% endif %}
+
+  <h2 class="h2">Find leads</h2>
+  <div class="card">
+    <div class="title">One-shot scrape</div>
+    <div class="sub">Free public discovery. Results land in Pipeline.</div>
+    <form method="POST" action="/scrape" style="margin-top: 12px; display:flex; gap:8px; flex-wrap:wrap;">
+      <input name="city"  placeholder="city  (e.g. Richmond)"  style="flex:1; min-width:140px; padding:10px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:8px;">
+      <input name="niche" placeholder="niche (e.g. movers)"    style="flex:1; min-width:140px; padding:10px; background:var(--panel-2); border:1px solid var(--border); color:var(--text); border-radius:8px;">
+      <button class="btn btn-primary" type="submit">Find leads</button>
+    </form>
+  </div>
+
+  <h2 class="h2">Exports</h2>
+  <div class="card row">
+    <div>
+      <div class="title">Download data</div>
+      <div class="sub">CSV exports of leads / campaigns / call-today.</div>
+    </div>
+    <div class="right" style="display:flex; gap:6px; flex-wrap:wrap;">
+      <a class="btn btn-sm" href="/export/leads.csv">leads.csv</a>
+      <a class="btn btn-sm" href="/export/campaigns.csv">campaigns.csv</a>
+      <a class="btn btn-sm" href="/export/call_today.csv">call_today.csv</a>
+    </div>
+  </div>
+
+  <h2 class="h2">Leak audit engine</h2>
+  <div class="card row">
+    <div>
+      <div class="title">Per-business leak audit</div>
+      <div class="sub">Real screenshots, leak score, outreach pack, PDF.</div>
+    </div>
+    <div class="right">
+      {% if admin_token %}
+        <a class="btn btn-primary btn-sm" href="/leaks?token={{ admin_token }}">Open</a>
+      {% else %}
+        <a class="btn btn-sm" href="/leaks">Open</a>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

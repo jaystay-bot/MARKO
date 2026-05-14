@@ -1,0 +1,48 @@
+{% extends "_marko_shell.html" %}
+{% block title %}Pipeline · MARKO{% endblock %}
+{% block subtitle %}Lead status, follow-ups, dispositions.{% endblock %}
+
+{% block content %}
+  <div class="card row" data-test="pipeline-summary">
+    <div>
+      <div class="title">{{ leads|length }} leads</div>
+      <div class="sub">
+        {{ count_by_status.NEW or 0 }} NEW ·
+        {{ count_by_status.CONTACTED or 0 }} CONTACTED ·
+        {{ count_by_status.INTERESTED or 0 }} INTERESTED ·
+        {{ count_by_status.BOOKED or 0 }} BOOKED
+      </div>
+    </div>
+    <div class="right">
+      <span class="pill MONEY">${{ pipeline_total or 0 }}</span>
+    </div>
+  </div>
+
+  <h2 class="h2">All leads</h2>
+  {% if leads %}
+    {% for l in leads %}
+      <div class="lead-row" data-test="pipeline-row">
+        <div>
+          <div class="biz">
+            <span class="pill {{ l._label or l.status or 'WEAK' }}">{{ l._label or l.status or '—' }}</span>
+            {{ l.name or '(no name)' }}
+          </div>
+          <div class="meta">
+            {{ l.niche or '—' }}{% if l.city %} · {{ l.city }}{% endif %}
+            {% if l.status %} · <span class="pill {{ l.status }}">{{ l.status }}</span>{% endif %}
+          </div>
+        </div>
+        <div class="right" style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+          {% if l.phone %}
+            <a class="btn btn-tel btn-sm" href="tel:{{ l.phone }}">Call</a>
+          {% endif %}
+          {% if l.email %}
+            <a class="btn btn-sm btn-ghost" href="mailto:{{ l.email }}" style="font-size:11px;">Email</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No leads yet. Run a scrape from Campaigns.</div>
+  {% endif %}
+{% endblock %}

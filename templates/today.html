@@ -1,0 +1,194 @@
+{% extends "_marko_shell.html" %}
+{% block title %}Today · MARKO{% endblock %}
+{% block subtitle %}What to do right now to close money.{% endblock %}
+
+{% block banners %}
+  {% if not is_persistent %}
+    <div class="banner warn" data-test="banner-persistence">
+      Demo mode — writes will not persist across deploys. Wire Upstash KV in Vercel to fix.
+    </div>
+  {% endif %}
+  {% if money_mode_data and money_mode_data.blockers %}
+    <div class="banner alert" data-test="banner-blockers">
+      {{ money_mode_data.blockers|length }} compliance blocker(s) holding back outbound.
+      <a href="/settings#compliance" style="color:inherit; text-decoration: underline;">Open Settings →</a>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  {# ---- HERO: Today's best lead -------------------------------------- #}
+  {% if hero_lead %}
+    {% set h = hero_lead %}
+    {% set ho = h.get('_offer') or {} %}
+    {% set hb = h.get('_brain') or {} %}
+    <section class="hero" data-test="hero">
+      <div class="label">Today's best lead</div>
+      <div class="biz" data-test="hero-biz">{{ h.name or '(no name)' }}</div>
+      <div class="meta">
+        {% if h.niche %}<span class="pill {{ h._label or 'WARM' }}">{{ h._label or 'WARM' }}</span> · {{ h.niche }}{% endif %}
+        {% if h.city %} · {{ h.city }}{% endif %}
+        {% if h.website %} · <a href="{{ h.website }}" target="_blank" rel="noopener">site ↗</a>{% endif %}
+      </div>
+
+      {% if h.pain_points %}
+        <div class="leak" data-test="hero-leak">
+          <b>Leak:</b>
+          {% for p in h.pain_points[:2] %}{{ p }}{% if not loop.last %}; {% endif %}{% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="stats">
+        <div class="stat">
+          <div class="k">Estimated value</div>
+          <div class="v money" data-test="hero-value">
+            {% if ho.price_min and ho.price_max %}
+              ${{ ho.price_min }}–${{ ho.price_max }}
+            {% elif ho.price %}
+              ${{ ho.price }}
+            {% else %}
+              —
+            {% endif %}
+          </div>
+        </div>
+        <div class="stat">
+          <div class="k">Score</div>
+          <div class="v {% if h._label == 'HOT' or h._label == 'MONEY' %}hot{% endif %}" data-test="hero-score">
+            {{ h._label or '—' }}
+            {% if h._score %}<span style="color:var(--muted); font-size:13px; font-weight:500;">({{ h._score }}/100)</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if hb.best_angle %}
+        <div class="angle" data-test="hero-angle">
+          <b>Best angle:</b> {{ hb.best_angle }}
+        </div>
+      {% endif %}
+
+      <div class="actions">
+        {% if h.phone %}
+          <a class="btn btn-primary" data-test="hero-call" href="tel:{{ h.phone }}">
+            📞 Call now · {{ h.phone }}
+          </a>
+        {% else %}
+          <span class="btn btn-ghost" style="flex:1; opacity:0.6;">No phone on file</span>
+        {% endif %}
+        {% if h.email %}
+          <a class="btn" data-test="hero-email" href="mailto:{{ h.email }}">Email</a>
+        {% endif %}
+      </div>
+    </section>
+  {% else %}
+    <section class="hero">
+      <div class="label">Today's best lead</div>
+      <div class="biz">No leads yet</div>
+      <div class="meta">Run a scrape from <a href="/campaigns">Campaigns</a> to start the queue.</div>
+    </section>
+  {% endif %}
+
+  {# ---- 1. Call First ---------------------------------------------- #}
+  <h2 class="h2">Call First <span class="count">· {{ call_first|length }}</span></h2>
+  {% if call_first %}
+    {% for l in call_first[:5] %}
+      <div class="lead-row" data-test="callfirst-row">
+        <div>
+          <div class="biz">
+            <span class="pill {{ l._label or 'WEAK' }}">{{ l._label or 'WEAK' }}</span>
+            {{ l.name or '(no name)' }}
+          </div>
+          <div class="meta">
+            {{ l.niche or '—' }}{% if l.city %} · {{ l.city }}{% endif %}
+            {% if l.phone %} · {{ l.phone }}{% endif %}
+          </div>
+        </div>
+        <div class="right">
+          {% if l.phone %}
+            <a class="btn btn-tel btn-sm" href="tel:{{ l.phone }}">Call</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+    {% if call_first|length > 5 %}
+      <a class="btn btn-ghost btn-sm" href="/pipeline?filter=callfirst" style="margin-top:6px;">
+        See all {{ call_first|length }} →
+      </a>
+    {% endif %}
+  {% else %}
+    <div class="empty">No call-first leads right now.</div>
+  {% endif %}
+
+  {# ---- 2. Follow-Ups Due ------------------------------------------- #}
+  <h2 class="h2">Follow-Ups Due <span class="count">· {{ followups_due|length }}</span></h2>
+  {% if followups_due %}
+    {% for l in followups_due[:5] %}
+      <div class="lead-row">
+        <div>
+          <div class="biz">{{ l.name or '(no name)' }}</div>
+          <div class="meta">
+            {% if l._sequence_state and l._sequence_state.label %}
+              {{ l._sequence_state.label }} ·
+            {% endif %}
+            {{ l.niche or '—' }}
+          </div>
+        </div>
+        <div class="right">
+          {% if l.phone %}<a class="btn btn-tel btn-sm" href="tel:{{ l.phone }}">Call</a>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No follow-ups due. Tomorrow's queue updates overnight.</div>
+  {% endif %}
+
+  {# ---- 3. Safe Email Queue ----------------------------------------- #}
+  <h2 class="h2">Safe Email Queue <span class="count">· {{ email_safe|length }}</span></h2>
+  {% if email_safe %}
+    {% for l in email_safe[:5] %}
+      <div class="lead-row">
+        <div>
+          <div class="biz">{{ l.name or '(no name)' }}</div>
+          <div class="meta">{{ l.email or '—' }}</div>
+        </div>
+        <div class="right">
+          {% if l.email %}<a class="btn btn-sm" href="mailto:{{ l.email }}">Email</a>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No emails queued. Cold-email path stays paused until a lead is staged.</div>
+  {% endif %}
+
+  {# ---- 4. Revenue At Risk ----------------------------------------- #}
+  <h2 class="h2">Revenue At Risk <span class="count">· ${{ pipeline or 0 }}</span></h2>
+  <div class="card" data-test="revenue-at-risk">
+    <div class="title" style="color: var(--money);">${{ pipeline or 0 }} in flight</div>
+    <div class="sub">
+      Sum of CONTACTED + INTERESTED leads in the closing window.
+      {% if cashflow and cashflow.demos_booked %}
+        {{ cashflow.demos_booked }} demos booked · {{ cashflow.closed_won or 0 }} closed.
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---- 5. New Hot Leads ------------------------------------------- #}
+  <h2 class="h2">New Hot Leads <span class="count">· {{ new_hot|length }}</span></h2>
+  {% if new_hot %}
+    {% for l in new_hot[:5] %}
+      <div class="lead-row">
+        <div>
+          <div class="biz">
+            <span class="pill {{ l._label or 'HOT' }}">{{ l._label or 'HOT' }}</span>
+            {{ l.name or '(no name)' }}
+          </div>
+          <div class="meta">{{ l.niche or '—' }}{% if l.city %} · {{ l.city }}{% endif %}</div>
+        </div>
+        <div class="right">
+          {% if l.phone %}<a class="btn btn-tel btn-sm" href="tel:{{ l.phone }}">Call</a>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No fresh HOT leads in the last sweep. Run scrape from Campaigns.</div>
+  {% endif %}
+{% endblock %}

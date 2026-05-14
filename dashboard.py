@@ -118,8 +118,215 @@ def load_json(filepath):
     return commands.load_json(filepath)
 
 
+# N-MARKO-VISUAL-REBUILD-V1: existing /` rendering preserved as /legacy.
+# The new mobile-first IA (Today / Pipeline / Campaigns / Settings) lives
+# in 4 new routes below. Each new route reuses the same data sources as
+# the legacy index to keep the engine untouched.
+
+
+def _safe_to_send_flag():
+    """Read-only helper for the shell's top-right pill."""
+    try:
+        cfg = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
+        mm = commands.money_mode()
+        return (not marko_compliance.config_blockers(cfg)
+                and (mm.get("cap_remaining") or 0) > 0)
+    except Exception:
+        return False
+
+
+def _admin_token_passthrough():
+    """If a ?token= is on the request, propagate to operator-route links."""
+    return (request.args.get("token") or "").strip() or None
+
+
 @app.route("/")
 def index():
+    """N-MARKO-VISUAL-REBUILD-V1 -- TODAY screen.
+
+    Mobile-first money cockpit. Hero card + 5 priority queues. Reuses
+    the same backend functions the legacy index uses; renders a slim
+    subset relevant to "what should Jay do right now to make money?".
+    """
+    leads = load_json(LEADS_FILE).get("leads", [])
+    commands.annotate_leads(leads)
+    call_first = commands.call_queue(limit=10)
+
+    # Enrich call_first rows with the bits the hero needs (offer + brain
+    # + sequence). Same idiom as the legacy index, scoped to top-N only.
+    try:
+        sender_name = commands.get_config().get("sender_name", "Jay")
+    except Exception:
+        sender_name = "Jay"
+    for _l in call_first:
+        if "_offer" not in _l:
+            try:
+                _l["_offer"] = marko_intel.recommend_offer(_l)
+            except Exception:
+                _l["_offer"] = {}
+        try:
+            _l["_sequence_state"] = marko_sequence.state_for(_l)
+        except Exception:
+            _l["_sequence_state"] = {}
+        try:
+            _brain = marko_brain.recommended_first_action(_l)
+            _brain["closability"] = marko_brain.closability_score(_l)
+            _brain["best_angle"] = marko_brain.best_angle(_l)
+            _l["_brain"] = _brain
+        except Exception:
+            _l["_brain"] = {}
+
+    # Hero pick: MONEY tier first, then HOT, then top-of-queue
+    hero_lead = (
+        next((l for l in call_first if l.get("_label") == "MONEY"), None)
+        or next((l for l in call_first if l.get("_label") == "HOT"), None)
+        or (call_first[0] if call_first else None)
+    )
+
+    # Queues (cheap derivations from already-annotated leads)
+    try:
+        money_mode_data = commands.money_mode(sender_name=sender_name)
+    except Exception:
+        money_mode_data = {"blockers": [], "call_now": [], "email_safe": [],
+                           "followup": [], "pipeline_low": 0, "pipeline_high": 0}
+    followups_due = money_mode_data.get("followup") or []
+    email_safe = money_mode_data.get("email_safe") or []
+    new_hot = [l for l in leads
+               if l.get("_label") in ("HOT", "MONEY")
+               and l.get("status") in (None, "NEW")][:10]
+
+    try:
+        pipeline = commands.pipeline_total(leads,
+                                           statuses=("CONTACTED", "INTERESTED"))
+    except Exception:
+        pipeline = 0
+    try:
+        cashflow = commands.cashflow_summary()
+    except Exception:
+        cashflow = {}
+
+    return render_template(
+        "today.html",
+        active_tab="today",
+        hero_lead=hero_lead,
+        call_first=call_first,
+        followups_due=followups_due,
+        email_safe=email_safe,
+        new_hot=new_hot,
+        pipeline=pipeline,
+        cashflow=cashflow,
+        money_mode_data=money_mode_data,
+        is_persistent=storage.is_persistent(),
+        safe_to_send=_safe_to_send_flag(),
+        admin_token=_admin_token_passthrough(),
+    )
+
+
+@app.route("/pipeline")
+def pipeline_view():
+    """Mobile-first leads list."""
+    leads = load_json(LEADS_FILE).get("leads", [])
+    commands.annotate_leads(leads)
+
+    # Sort: HOT/MONEY first, then status priority, then recency
+    label_rank = {"MONEY": 0, "HOT": 1, "GOOD": 2, "WARM": 3, "WEAK": 4}
+    status_rank = {"INTERESTED": 0, "BOOKED": 1, "CONTACTED": 2,
+                   "NEW": 3, "RETRY": 4, "DEAD": 5}
+    leads.sort(
+        key=lambda l: (label_rank.get(l.get("_label"), 9),
+                       status_rank.get(l.get("status"), 9),
+                       (l.get("name") or "").lower()),
+    )
+
+    count_by_status = {}
+    for l in leads:
+        s = l.get("status") or "NEW"
+        count_by_status[s] = count_by_status.get(s, 0) + 1
+
+    try:
+        pipeline_total = commands.pipeline_total(leads,
+                                                 statuses=("CONTACTED", "INTERESTED"))
+    except Exception:
+        pipeline_total = 0
+
+    return render_template(
+        "pipeline.html",
+        active_tab="pipeline",
+        leads=leads,
+        count_by_status=count_by_status,
+        pipeline_total=pipeline_total,
+        is_persistent=storage.is_persistent(),
+        safe_to_send=_safe_to_send_flag(),
+        admin_token=_admin_token_passthrough(),
+    )
+
+
+@app.route("/campaigns")
+def campaigns_view():
+    """Niche presets + active campaigns + scrape launcher + exports."""
+    campaigns = load_json(CAMPAIGNS_FILE).get("campaigns", [])
+    active = [c for c in campaigns if c.get("status") == "ACTIVE"]
+    presets = []
+    try:
+        templates_doc = commands.get_templates() or {}
+        presets = templates_doc.get("campaign_presets") or []
+        # Some installs only have niche_presets; merge as a fallback so the
+        # screen always shows something to launch.
+        if not presets:
+            presets = templates_doc.get("niche_presets") or []
+    except Exception:
+        presets = []
+    return render_template(
+        "campaigns.html",
+        active_tab="campaigns",
+        active_campaigns=active,
+        presets=presets,
+        is_persistent=storage.is_persistent(),
+        safe_to_send=_safe_to_send_flag(),
+        admin_token=_admin_token_passthrough(),
+    )
+
+
+@app.route("/settings")
+def settings_view():
+    """Compliance + diagnostics + advanced ops (progressive disclosure)."""
+    config_for_view = commands.get_config() if os.path.exists(commands.CONFIG_FILE) else {}
+    try:
+        mm = commands.money_mode()
+        cap_remaining = mm.get("cap_remaining", 0)
+    except Exception:
+        cap_remaining = 0
+    compliance_state = {
+        "config_blockers": marko_compliance.config_blockers(config_for_view),
+        "deliverability": marko_compliance.deliverability_checklist(config_for_view),
+        "safe_to_send": (not marko_compliance.config_blockers(config_for_view)
+                         and cap_remaining > 0),
+        "stop_list_size": len(config_for_view.get("stop_contact_list") or []),
+    }
+    env = {
+        "quote_live": (os.environ.get("MARKO_QUOTE_LIVE_SEND") or "").strip() == "1",
+        "outreach_live": (os.environ.get("MARKO_OUTREACH_LIVE") or "").strip() == "1",
+        "resend_set": bool((os.environ.get("RESEND_API_KEY") or "").strip()),
+        "admin_token_set": bool((os.environ.get("ADMIN_TOKEN") or "").strip()),
+        "from_email": (os.environ.get("MARKO_FROM_EMAIL") or "").strip() or None,
+    }
+    return render_template(
+        "settings.html",
+        active_tab="settings",
+        compliance_state=compliance_state,
+        env=env,
+        is_persistent=storage.is_persistent(),
+        safe_to_send=_safe_to_send_flag(),
+        admin_token=_admin_token_passthrough(),
+    )
+
+
+@app.route("/legacy")
+def legacy():
+    """Original full operator dashboard. Preserved unchanged so every
+    existing form/button/widget keeps working during the V1 visual
+    rebuild transition. Bottom of every new screen links here.
+    """
     campaigns = load_json(CAMPAIGNS_FILE).get("campaigns", [])
     leads = load_json(LEADS_FILE).get("leads", [])
     log = load_json(LOG_FILE).get("log", [])

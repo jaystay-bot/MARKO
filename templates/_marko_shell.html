@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0c0e">
+  <title>{% block title %}MARKO{% endblock %}</title>
+  <style>
+    /* ============================================================
+       MARKO Visual Rebuild V1
+       Linear / Stripe / Raycast restraint. No animations, no gradients,
+       no glow. Dark by default. One CTA color (green) per screen.
+       Rhythm: 4 / 8 / 12 / 18 / 28 / 44 px.
+       ============================================================ */
+    :root {
+      --bg:        #0a0c0e;
+      --bg-elev:   #10141a;
+      --panel:     #141a21;
+      --panel-2:   #1b232c;
+      --border:    #232c36;
+      --border-2:  #2f3a47;
+      --text:      #e8eef5;
+      --text-dim:  #b6bfca;
+      --muted:     #8a98a8;
+      --muted-dim: #5d6877;
+      --accent:    #00d68f;       /* primary CTA -- one per screen */
+      --accent-ink:#001b11;
+      --money:     #ffd24c;       /* dollar amounts only */
+      --hot:       #ff5c5c;       /* HOT score / urgency only */
+      --warm:      #ffb366;
+      --info:      #4cb3ff;
+      --good:      #00ffa6;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                   "Segoe UI", system-ui, sans-serif;
+      font-size: 16px; line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    button { font: inherit; }
+
+    /* ---- Layout shell ------------------------------------------------ */
+    .shell {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 16px 16px 96px;  /* bottom space for tab bar + safe area */
+    }
+    .topbar {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 12px; margin-bottom: 18px;
+    }
+    .brand {
+      font-size: 20px; font-weight: 700; letter-spacing: -0.01em;
+    }
+    .brand .accent { color: var(--accent); }
+    .brand-sub {
+      color: var(--muted); font-size: 13px; margin-top: 2px;
+    }
+    .topbar .right { color: var(--muted); font-size: 12px; }
+
+    /* ---- Section heading -------------------------------------------- */
+    .h2 {
+      color: var(--muted); font-size: 12px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      margin: 28px 0 12px;
+    }
+    .h2 .count { color: var(--text-dim); font-weight: 500; }
+
+    /* ---- Cards ------------------------------------------------------- */
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .card + .card { margin-top: 10px; }
+    .card.row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px;
+    }
+    .card .title { font-weight: 600; }
+    .card .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+    .card .ev  { color: var(--text-dim); font-size: 13px; }
+    .card.click {
+      cursor: pointer;
+      transition: border-color 0.12s ease;
+    }
+    .card.click:hover { border-color: var(--border-2); }
+
+    /* ---- Hero card (TODAY's best lead) ------------------------------- */
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .hero .label {
+      color: var(--muted); font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.12em;
+    }
+    .hero .biz {
+      font-size: 24px; font-weight: 700;
+      letter-spacing: -0.015em;
+      margin: 6px 0 4px;
+    }
+    .hero .meta {
+      color: var(--muted); font-size: 13px;
+    }
+    .hero .leak {
+      margin-top: 14px; padding: 12px;
+      background: var(--panel-2);
+      border-left: 3px solid var(--hot);
+      border-radius: 8px;
+      font-size: 14px; line-height: 1.5;
+    }
+    .hero .leak b { color: var(--hot); font-weight: 600; }
+    .hero .stats {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      margin-top: 14px;
+    }
+    .hero .stat {
+      background: var(--panel-2);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .hero .stat .k {
+      color: var(--muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .hero .stat .v {
+      font-size: 18px; font-weight: 600; margin-top: 2px;
+    }
+    .hero .stat .v.money { color: var(--money); }
+    .hero .stat .v.hot   { color: var(--hot); }
+    .hero .actions {
+      display: flex; gap: 10px; margin-top: 18px;
+    }
+    .hero .actions .btn-primary { flex: 1; }
+    .hero .angle {
+      color: var(--text-dim); font-size: 14px; line-height: 1.55;
+      margin-top: 14px; padding: 10px 12px;
+      background: var(--bg-elev); border-radius: 8px;
+    }
+    .hero .angle b { color: var(--text); }
+
+    /* ---- Buttons ----------------------------------------------------- */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 8px;
+      padding: 12px 16px; min-height: 48px;
+      border-radius: 10px; border: 1px solid var(--border);
+      background: var(--panel-2); color: var(--text);
+      font-size: 15px; font-weight: 500;
+      text-decoration: none; cursor: pointer;
+    }
+    .btn:hover { border-color: var(--border-2); text-decoration: none; }
+    .btn-primary {
+      background: var(--accent); color: var(--accent-ink);
+      border-color: transparent; font-weight: 600;
+    }
+    .btn-primary:hover { background: #00ffa6; }
+    .btn-tel {
+      background: #0e2b1d; color: var(--good); border-color: #1f6c52;
+    }
+    .btn-ghost {
+      background: transparent;
+    }
+    .btn-sm { padding: 8px 12px; min-height: 36px; font-size: 13px; }
+
+    /* ---- Status pills ----------------------------------------------- */
+    .pill {
+      display: inline-block; padding: 2px 10px; border-radius: 999px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+      background: var(--panel-2); color: var(--muted);
+      text-transform: uppercase;
+    }
+    .pill.MONEY      { background: #2a2210; color: var(--money); }
+    .pill.HOT        { background: #2a1212; color: var(--hot); }
+    .pill.GOOD       { background: #122a1f; color: var(--good); }
+    .pill.WARM       { background: #2a1f12; color: var(--warm); }
+    .pill.WEAK       { background: var(--panel-2); color: var(--muted); }
+    .pill.NEW        { background: #122035; color: var(--info); }
+    .pill.CONTACTED  { background: #122a1f; color: var(--good); }
+    .pill.INTERESTED { background: #2a2210; color: var(--money); }
+    .pill.BOOKED     { background: #00d68f; color: var(--accent-ink); }
+    .pill.DEAD       { background: var(--panel-2); color: var(--muted-dim); }
+    .pill.RETRY      { background: #1f1c12; color: var(--warm); }
+
+    /* ---- Empty states ----------------------------------------------- */
+    .empty {
+      color: var(--muted); font-size: 14px;
+      padding: 18px; text-align: center;
+      background: var(--panel); border: 1px dashed var(--border);
+      border-radius: 12px;
+    }
+
+    /* ---- Bottom tab navigation -------------------------------------- */
+    .tabbar {
+      position: fixed; left: 0; right: 0; bottom: 0;
+      background: rgba(10, 12, 14, 0.92);
+      backdrop-filter: saturate(140%) blur(12px);
+      -webkit-backdrop-filter: saturate(140%) blur(12px);
+      border-top: 1px solid var(--border);
+      padding: 6px 0 calc(6px + env(safe-area-inset-bottom));
+      z-index: 50;
+    }
+    .tabbar .inner {
+      max-width: 760px; margin: 0 auto;
+      display: grid; grid-template-columns: repeat(4, 1fr);
+    }
+    .tabbar a {
+      display: flex; flex-direction: column; align-items: center;
+      gap: 2px; padding: 8px 4px;
+      color: var(--muted); font-size: 11px; font-weight: 500;
+      text-decoration: none;
+      letter-spacing: 0.02em;
+    }
+    .tabbar a.active { color: var(--text); }
+    .tabbar a.active .dot {
+      background: var(--accent);
+    }
+    .tabbar .dot {
+      width: 4px; height: 4px; border-radius: 999px;
+      background: transparent; margin-bottom: 2px;
+    }
+
+    /* ---- Banners ---------------------------------------------------- */
+    .banner {
+      padding: 10px 14px; border-radius: 10px;
+      font-size: 13px; line-height: 1.45; margin-bottom: 14px;
+    }
+    .banner.ok    { background: #0e1c14; color: var(--good); border: 1px solid #1e6c4a; }
+    .banner.warn  { background: #2a1f10; color: var(--warm); border: 1px solid #5a3a16; }
+    .banner.alert { background: #2a1010; color: var(--hot);  border: 1px solid #5a1f1f; }
+
+    /* ---- Inline lead row -------------------------------------------- */
+    .lead-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      margin-bottom: 8px;
+    }
+    .lead-row .biz { font-weight: 600; }
+    .lead-row .meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .lead-row .right { text-align: right; }
+
+    /* ---- Disclosure ------------------------------------------------- */
+    details.disc {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    details.disc > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      font-weight: 600;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    details.disc > summary::-webkit-details-marker { display: none; }
+    details.disc > summary::after {
+      content: "▾"; color: var(--muted); font-size: 13px;
+      transition: transform 0.15s ease;
+    }
+    details.disc[open] > summary::after { transform: rotate(180deg); }
+    details.disc .body { padding: 0 14px 14px; }
+
+    .footnote {
+      color: var(--muted); font-size: 12px; text-align: center;
+      margin-top: 28px;
+    }
+    .legacy-link {
+      display: block; text-align: center;
+      color: var(--muted); font-size: 13px;
+      margin-top: 24px; padding: 12px;
+      border: 1px dashed var(--border); border-radius: 10px;
+    }
+
+    /* Desktop layout: a touch wider, no tab-bar overlap */
+    @media (min-width: 720px) {
+      .shell { padding: 24px 24px 110px; }
+      .hero { padding: 28px; }
+      .hero .biz { font-size: 28px; }
+    }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <div class="brand">MARKO <span class="accent">·</span> Today's Money Opportunities</div>
+        <div class="brand-sub">{% block subtitle %}What to do right now to close money.{% endblock %}</div>
+      </div>
+      <div class="right">
+        {% if safe_to_send is defined and safe_to_send %}
+          <span class="pill GOOD">SAFE TO SEND</span>
+        {% elif safe_to_send is defined %}
+          <span class="pill WEAK">SEND PAUSED</span>
+        {% endif %}
+      </div>
+    </header>
+
+    {% block banners %}{% endblock %}
+    {% block content %}{% endblock %}
+
+    <a class="legacy-link" href="/legacy">Open full operator dashboard (legacy view) &rarr;</a>
+    <p class="footnote">MARKO · public-data only · operator UI</p>
+  </div>
+
+  <nav class="tabbar" aria-label="Primary">
+    <div class="inner">
+      <a href="/"          class="{% if active_tab == 'today' %}active{% endif %}">
+        <span class="dot"></span>Today
+      </a>
+      <a href="/pipeline"  class="{% if active_tab == 'pipeline' %}active{% endif %}">
+        <span class="dot"></span>Pipeline
+      </a>
+      <a href="/campaigns" class="{% if active_tab == 'campaigns' %}active{% endif %}">
+        <span class="dot"></span>Campaigns
+      </a>
+      <a href="/settings"  class="{% if active_tab == 'settings' %}active{% endif %}">
+        <span class="dot"></span>Settings
+      </a>
+    </div>
+  </nav>
+</body>
+</html>

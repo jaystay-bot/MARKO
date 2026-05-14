@@ -1,0 +1,161 @@
+{% extends "_marko_shell.html" %}
+{% block title %}Settings · MARKO{% endblock %}
+{% block subtitle %}Compliance, diagnostics, advanced controls.{% endblock %}
+
+{% block content %}
+  {# ---- Compliance (visible by default; it's load-bearing) -------- #}
+  <h2 class="h2" id="compliance">Compliance</h2>
+  {% if compliance_state %}
+    <div class="card" data-test="settings-compliance">
+      <div class="row" style="display:flex;justify-content:space-between;align-items:baseline;">
+        <div class="title">
+          {% if compliance_state.safe_to_send %}
+            <span class="pill GOOD">SAFE TO SEND</span>
+          {% else %}
+            <span class="pill HOT">SEND PAUSED</span>
+          {% endif %}
+        </div>
+        <div class="sub">stop-list: {{ compliance_state.stop_list_size or 0 }}</div>
+      </div>
+      {% if compliance_state.config_blockers %}
+        <ul style="margin: 10px 0 0; padding-left: 18px; color: var(--hot);">
+          {% for b in compliance_state.config_blockers %}
+            <li>{{ b }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if compliance_state.deliverability %}
+        <details class="disc" style="margin-top: 10px;">
+          <summary>Deliverability checklist</summary>
+          <div class="body">
+            <ul style="margin:0; padding-left: 18px;">
+              {% for item in compliance_state.deliverability %}
+                <li>{{ item }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </details>
+      {% endif %}
+      <div style="margin-top: 12px;">
+        <a class="btn btn-sm" href="/legacy#compliance">Edit compliance config →</a>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ---- Diagnostics (always-on) ----------------------------------- #}
+  <h2 class="h2">Diagnostics</h2>
+  <div class="card row" data-test="settings-diag">
+    <div>
+      <div class="title">Live system check</div>
+      <div class="sub">Backend health, KV persistence, deploy environment.</div>
+    </div>
+    <div class="right">
+      <a class="btn btn-sm" href="/__diag" target="_blank">Open /__diag</a>
+    </div>
+  </div>
+
+  {# ---- Operator surfaces ---------------------------------------- #}
+  <h2 class="h2">Operator surfaces</h2>
+  <div class="card row">
+    <div>
+      <div class="title">Money cockpit</div>
+      <div class="sub">Tier strip, hot ZIPs, activity feed.</div>
+    </div>
+    <div class="right">
+      {% if admin_token %}
+        <a class="btn btn-sm" href="/cockpit?token={{ admin_token }}">Open</a>
+      {% else %}
+        <a class="btn btn-sm" href="/cockpit">Open</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card row">
+    <div>
+      <div class="title">Money mode JSON / mobile brief</div>
+      <div class="sub">Top movers + revenue band.</div>
+    </div>
+    <div class="right">
+      {% if admin_token %}
+        <a class="btn btn-sm" href="/money?token={{ admin_token }}&format=html">Open</a>
+      {% else %}
+        <a class="btn btn-sm" href="/money?format=html">Open</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card row">
+    <div>
+      <div class="title">Outreach review queue</div>
+      <div class="sub">Approve / skip drafts before any send.</div>
+    </div>
+    <div class="right">
+      {% if admin_token %}
+        <a class="btn btn-sm" href="/review?token={{ admin_token }}">Open</a>
+      {% else %}
+        <a class="btn btn-sm" href="/review">Open</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card row">
+    <div>
+      <div class="title">Conversion analytics</div>
+      <div class="sub">Funnel, CTAs, source attribution.</div>
+    </div>
+    <div class="right">
+      {% if admin_token %}
+        <a class="btn btn-sm" href="/admin/conversions?token={{ admin_token }}">Open</a>
+      {% else %}
+        <a class="btn btn-sm" href="/admin/conversions">Open</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="card row">
+    <div>
+      <div class="title">Leak engine dashboard</div>
+      <div class="sub">Per-business audit + chat closer + PDF.</div>
+    </div>
+    <div class="right">
+      {% if admin_token %}
+        <a class="btn btn-sm" href="/leaks?token={{ admin_token }}">Open</a>
+      {% else %}
+        <a class="btn btn-sm" href="/leaks">Open</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ---- Advanced (collapsed by default; Tier-3 progressive disclosure) #}
+  <h2 class="h2">Advanced</h2>
+  <details class="disc" data-test="settings-advanced">
+    <summary>Retry / activity / debug</summary>
+    <div class="body">
+      <p class="sub" style="margin-top: 0;">
+        Heavy-duty controls live in the legacy operator dashboard. They've
+        been collapsed here so the daily money flow stays clean.
+      </p>
+      <a class="btn btn-sm" href="/legacy#retry">Open retry queue</a>
+      <a class="btn btn-sm" href="/legacy#activity" style="margin-left:6px;">Activity log</a>
+      <a class="btn btn-sm" href="/legacy" style="margin-left:6px;">Full operator dashboard</a>
+    </div>
+  </details>
+
+  <details class="disc">
+    <summary>Live-send environment status</summary>
+    <div class="body">
+      <table style="width:100%; font-size:14px;">
+        <tr><td style="color:var(--muted);">MARKO_QUOTE_LIVE_SEND</td>
+            <td>{{ 'ON' if env.quote_live else 'off' }}</td></tr>
+        <tr><td style="color:var(--muted);">MARKO_OUTREACH_LIVE</td>
+            <td>{{ 'ON' if env.outreach_live else 'off' }}</td></tr>
+        <tr><td style="color:var(--muted);">RESEND_API_KEY</td>
+            <td>{{ 'set' if env.resend_set else 'unset' }}</td></tr>
+        <tr><td style="color:var(--muted);">ADMIN_TOKEN</td>
+            <td>{{ 'set' if env.admin_token_set else 'unset' }}</td></tr>
+        <tr><td style="color:var(--muted);">MARKO_FROM_EMAIL</td>
+            <td>{{ env.from_email or '—' }}</td></tr>
+      </table>
+      <p class="sub">
+        Send paths default to dry-run unless both a live env flag and an
+        allowlist match. No automatic sends on this dashboard.
+      </p>
+    </div>
+  </details>
+{% endblock %}
