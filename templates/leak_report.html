@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0c0e">
+  <title>Leak audit — {{ report.business_name }}</title>
+  <style>
+    :root {
+      --bg: #0a0c0e; --panel: #141a21; --panel-2: #1b232c;
+      --border: #232c36; --text: #e8eef5; --muted: #8a98a8;
+      --accent: #00d68f; --money: #ffd24c; --hot: #ff5c5c;
+      --warm: #ffb366; --info: #4cb3ff; --good: #00ffa6;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+    body {
+      font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI",
+            system-ui, sans-serif;
+      padding: 14px 14px calc(28px + env(safe-area-inset-bottom));
+      max-width: 880px; margin: 0 auto;
+    }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    h2 { font-size: 13px; margin: 22px 0 10px; color: var(--muted);
+         letter-spacing: .1em; text-transform: uppercase; }
+    h3 { font-size: 16px; margin: 0 0 6px; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .muted { color: var(--muted); font-size: 13px; }
+    code { background: var(--panel-2); padding: 1px 6px; border-radius: 4px;
+           font-size: 13px; }
+    pre {
+      background: var(--panel-2); padding: 12px; border-radius: 8px;
+      white-space: pre-wrap; word-wrap: break-word; font-size: 14px;
+      line-height: 1.55;
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+           margin-top: 6px; }
+    .pill { display: inline-block; padding: 2px 10px; border-radius: 999px;
+            background: var(--panel-2); color: var(--muted); font-size: 12px; }
+    .pill.HIGH   { background: #2a1212; color: var(--hot); }
+    .pill.MEDIUM { background: #2a1f12; color: var(--warm); }
+    .pill.LOW    { background: #122035; color: var(--info); }
+    .card { background: var(--panel); border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px; margin-top: 10px; }
+    .leak {
+      background: #1c1112; border: 1px solid #4a1f1f; border-radius: 8px;
+      padding: 10px 12px; margin: 8px 0;
+    }
+    .leak b { color: var(--hot); }
+    .leak .ev { color: var(--muted); font-size: 13px; }
+
+    .shots { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 700px) {
+      .shots { grid-template-columns: 1fr 1fr; }
+    }
+    .shot {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 8px; text-align: center;
+    }
+    .shot img { max-width: 100%; height: auto; display: block;
+                margin: 0 auto; border-radius: 6px; }
+    .shot.mobile img { max-width: 280px; }
+
+    .topbar { display: flex; gap: 10px; flex-wrap: wrap;
+              align-items: center; justify-content: space-between;
+              margin-bottom: 6px; }
+    .topbar .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn { background: var(--panel-2); border: 1px solid var(--border);
+           color: var(--text); padding: 8px 12px; border-radius: 6px;
+           font-size: 14px; cursor: pointer; }
+    .btn.primary { background: var(--accent); color: #001b11; border: none;
+                   font-weight: 600; }
+
+    /* Print to PDF -- hide chrome, expand layout. */
+    @media print {
+      body { background: white; color: black; max-width: none;
+             padding: 0; }
+      .no-print, .topbar .actions, .btn { display: none !important; }
+      .card, .shot, pre { background: white; color: black;
+                          border: 1px solid #ccc; }
+      .leak { background: #fff8f8; color: #6a1a1a; border-color: #d99; }
+      a { color: black; text-decoration: underline; }
+      h1 { font-size: 20pt; }
+      h2 { color: #333; }
+      .muted { color: #555; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <a class="muted" href="/leaks/run/{{ run_id }}{% if token %}?token={{ token }}{% endif %}">&larr; back to run</a>
+    </div>
+    <div class="actions no-print">
+      <a class="btn" data-test="download-pdf"
+         href="/leaks/run/{{ run_id }}/{{ biz_slug }}/audit.pdf{% if token %}?token={{ token }}{% endif %}"
+         target="_blank" rel="noopener"
+         download="{{ biz_slug }}-audit.pdf">Download PDF</a>
+      <button class="btn primary" data-test="print-pdf"
+              onclick="window.print()">Print to PDF</button>
+    </div>
+  </div>
+
+  <h1 data-test="biz-name">{{ report.business_name }}</h1>
+  <div class="row">
+    {% set s = report.leak_score or 0 %}
+    {% set band = "HIGH" if s >= 70 else ("MEDIUM" if s >= 40 else "LOW") %}
+    <span class="pill {{ band }}">leak score {{ s }}/100 ({{ band }})</span>
+    <span class="pill">confidence {{ report.confidence_score }}/100</span>
+    {% if report.estimated_lost_leads %}
+      <span class="pill">heuristic loss
+        ~{{ report.estimated_lost_leads.leads_per_month_low }}–{{ report.estimated_lost_leads.leads_per_month_high }}/mo</span>
+    {% endif %}
+  </div>
+  <div class="muted" style="margin-top:6px;">
+    <a href="{{ report.website }}" target="_blank" rel="noopener">{{ report.website }}</a>
+    {% if report.niche and report.niche.resolved_key %}
+      &middot; niche <code>{{ report.niche.resolved_key }}</code>
+    {% endif %}
+  </div>
+
+  <h2>Screenshots (live scan)</h2>
+  <div class="shots" data-test="screenshots">
+    <div class="shot">
+      <img alt="desktop screenshot"
+           data-test="screenshot-desktop"
+           src="/leaks/run/{{ run_id }}/{{ biz_slug }}/screenshot/desktop{% if token %}?token={{ token }}{% endif %}">
+      <div class="muted">desktop 1280&times;900</div>
+    </div>
+    <div class="shot mobile">
+      <img alt="mobile screenshot"
+           data-test="screenshot-mobile"
+           src="/leaks/run/{{ run_id }}/{{ biz_slug }}/screenshot/mobile{% if token %}?token={{ token }}{% endif %}">
+      <div class="muted">mobile 375&times;812</div>
+    </div>
+  </div>
+
+  <h2>Top 3 leaks</h2>
+  <div data-test="top-3-leaks">
+    {% for l in (report.top_3_leaks or []) %}
+      <div class="leak">
+        <div><b>{{ l.category }}</b>
+             <span class="pill {{ 'HIGH' if l.severity == 'high' else ('MEDIUM' if l.severity == 'medium' else 'LOW') }}">{{ l.severity }}</span>
+        </div>
+        <div class="ev">{{ l.evidence }}</div>
+      </div>
+    {% else %}
+      <div class="muted">No major leaks observed.</div>
+    {% endfor %}
+  </div>
+
+  <h2>Why this matters</h2>
+  <div class="card" data-test="why-it-matters">
+    These are heuristic estimates from a 60-second public-data scan.
+    Heuristic loss band:
+    <b>~{{ report.estimated_lost_leads.leads_per_month_low }}–{{ report.estimated_lost_leads.leads_per_month_high }} leads/month</b>.
+    Basis: <span class="muted">{{ report.estimated_lost_leads.basis }}</span>
+  </div>
+
+  <h2>Suggested fixes</h2>
+  <div class="card" data-test="suggested-fixes">
+    <ul>
+      {% for f in report.suggested_fixes %}
+        <li><b>{{ f.leak }}:</b> {{ f.fix }}</li>
+      {% else %}
+        <li class="muted">(no fixes needed)</li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <h2>Suggested offer</h2>
+  <div class="card" data-test="suggested-offer">{{ report.suggested_offer }}</div>
+
+  <h2>Outreach pack</h2>
+  <div class="card" data-test="outreach-email">
+    <h3>Cold email</h3>
+    <div><b>Subject:</b> {{ report.outreach_draft.subject }}</div>
+    <pre>{{ report.outreach_draft.body }}</pre>
+  </div>
+
+  <h2>Loom 30-second script</h2>
+  <div class="card" data-test="loom-30">
+    <div class="muted">Format: vertical 9:16 screenshare, ~30s.
+       Driver leak: <code>{{ report.loom_30s_script.leak_driver or '—' }}</code></div>
+    <p><b>Shot list:</b> {{ report.loom_30s_script.shot_list }}</p>
+    <pre>{{ report.loom_30s_script.script }}</pre>
+  </div>
+
+  <h2>Loom 90-second script</h2>
+  <div class="card" data-test="loom-90">
+    <div class="muted">Format: screenshare, ~90s.
+       Driver leak: <code>{{ report.loom_90s_script.leak_driver or '—' }}</code></div>
+    <p><b>Shot list:</b> {{ report.loom_90s_script.shot_list }}</p>
+    <pre>{{ report.loom_90s_script.script }}</pre>
+  </div>
+
+  <h2>Mini commercial concept</h2>
+  <div class="card" data-test="mini-commercial">
+    <div class="muted">{{ report.mini_commercial_concept.format }}</div>
+    <p>{{ report.mini_commercial_concept.concept }}</p>
+    <p class="muted"><b>Beats:</b>
+      {% for b in report.mini_commercial_concept.beats %}{{ b }}{% if not loop.last %} · {% endif %}{% endfor %}
+    </p>
+    <p class="muted"><b>Production notes:</b>
+      {{ report.mini_commercial_concept.production_notes }}</p>
+  </div>
+
+  <h2>MARKO Sales Operator (chat)</h2>
+  <div class="card no-print" data-test="chat-panel"
+       id="chat-panel"
+       data-run-id="{{ run_id }}"
+       data-biz-slug="{{ biz_slug }}"
+       data-token="{{ token }}">
+    <div class="muted" data-test="chat-grounding">
+      Answers use verified report data only.
+    </div>
+    <div class="muted" data-test="chat-safety"
+         style="margin-top:4px;">
+      No emails sent. No calls made. Manual outreach only.
+    </div>
+
+    <div data-test="chat-buttons"
+         style="margin-top:12px; display:flex; flex-wrap:wrap; gap:6px;">
+      <button class="btn" data-cmd="who_first">Who should I contact first?</button>
+      <button class="btn" data-cmd="why_business">Why this business?</button>
+      <button class="btn" data-cmd="what_to_say">What should I say?</button>
+      <button class="btn" data-cmd="loom_30">Make a 30-sec Loom script</button>
+      <button class="btn" data-cmd="handle_objection">Handle objection</button>
+      <button class="btn" data-cmd="offer_99">Create $99 offer</button>
+      <button class="btn" data-cmd="offer_300">Create $300 offer</button>
+      <button class="btn" data-cmd="offer_200_mo">Create $200/mo offer</button>
+      <button class="btn" data-cmd="rank_easiest">Rank easiest closes</button>
+      <button class="btn" data-cmd="follow_up">Make follow-up message</button>
+      <button class="btn primary" data-cmd="do_now">What should Jay do right now?</button>
+    </div>
+
+    <div style="margin-top:10px; display:flex; gap:6px;">
+      <input type="text" id="chat-input" data-test="chat-input"
+             placeholder="Or type a free-text question (e.g. an objection)"
+             style="flex:1; min-width:0; padding:10px; font:14px system-ui;
+                    border-radius:6px; border:1px solid var(--border);
+                    background: var(--panel-2); color: var(--text);">
+      <button class="btn" id="chat-send" data-test="chat-send">Ask</button>
+    </div>
+
+    <div id="chat-meta" data-test="chat-meta" class="muted"
+         style="margin-top:10px; font-size:12px;"></div>
+    <pre id="chat-response" data-test="chat-response"
+         style="margin-top:6px; min-height:80px;"
+         aria-live="polite"></pre>
+  </div>
+
+  <script>
+    (function () {
+      var panel = document.getElementById('chat-panel');
+      if (!panel) return;
+      var runId = panel.dataset.runId;
+      var bizSlug = panel.dataset.bizSlug;
+      var token = panel.dataset.token;
+      var input = document.getElementById('chat-input');
+      var resp = document.getElementById('chat-response');
+      var meta = document.getElementById('chat-meta');
+
+      function setLoading(cmd) {
+        meta.textContent = 'asking MARKO (' + cmd + ')...';
+        resp.textContent = '';
+      }
+      function render(out) {
+        resp.textContent = out.answer || '';
+        var parts = [];
+        parts.push(out.used_model
+          ? 'rewritten by local model: ' + (out.model_name || '?')
+          : 'deterministic template');
+        if (out.fallback_reason)
+          parts.push('reason: ' + out.fallback_reason);
+        var gf = out.grounded_fields || {};
+        var keys = Object.keys(gf);
+        if (keys.length)
+          parts.push('grounded fields: ' + keys.join(', '));
+        meta.textContent = parts.join(' · ');
+      }
+      function ask(cmd, freeText) {
+        setLoading(cmd);
+        var url = '/api/marko/chat';
+        if (token) url += '?token=' + encodeURIComponent(token);
+        fetch(url, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            command: cmd,
+            run_id: runId,
+            biz_slug: bizSlug,
+            free_text: freeText || null,
+          }),
+        }).then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        }).then(render).catch(function (err) {
+          meta.textContent = 'error: ' + err.message;
+          resp.textContent = '';
+        });
+      }
+
+      var btns = panel.querySelectorAll('button[data-cmd]');
+      for (var i = 0; i < btns.length; i++) {
+        (function (b) {
+          b.addEventListener('click', function () {
+            ask(b.dataset.cmd, null);
+          });
+        })(btns[i]);
+      }
+      document.getElementById('chat-send')
+        .addEventListener('click', function () {
+          var t = (input.value || '').trim();
+          if (!t) return;
+          // Free text -> "custom" command (handle_objection if it
+          // looks like one); deterministic dispatcher routes inside.
+          var cmd = /price|expensive|cost|spam|already|not interested|email later|how do you have/i
+            .test(t) ? 'handle_objection' : 'custom';
+          ask(cmd, t);
+        });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') document.getElementById('chat-send').click();
+      });
+    })();
+  </script>
+
+  <h2>Source files (operator only)</h2>
+  <div class="card no-print muted" data-test="source-paths">
+    <div>desktop png: <code>leak_reports/{{ run_id }}/{{ biz_slug }}/screenshot_desktop.png</code></div>
+    <div>mobile png:  <code>leak_reports/{{ run_id }}/{{ biz_slug }}/screenshot_mobile.png</code></div>
+    <div>report json: <code>leak_reports/{{ run_id }}/{{ biz_slug }}/report.json</code></div>
+    <div>report md:   <code>leak_reports/{{ run_id }}/{{ biz_slug }}/report.md</code></div>
+  </div>
+</body>
+</html>

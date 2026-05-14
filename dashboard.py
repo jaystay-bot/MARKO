@@ -1729,6 +1729,165 @@ def money_mode():
     return jsonify({"report": report, "revenue_queue": queue})
 
 
+# ---------- MARKO Sales Operator chat (N005) ----------
+#
+# Single POST endpoint, token-gated. JSON body:
+#   {"command": "<one of marko_chat.COMMANDS>",
+#    "run_id":  "<optional>",
+#    "biz_slug": "<optional>",
+#    "free_text": "<optional>"}
+# Returns: {answer, grounded_fields, used_model, model_name, fallback_reason}
+#
+# Deterministic templates always answer; Ollama (off by default) only
+# rewrites tone. No paid API. No auto-send.
+
+
+@app.route("/api/marko/chat", methods=["POST"])
+def api_marko_chat():
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if provided != expected:
+        return Response("forbidden", status=403, mimetype="text/plain")
+    body = request.get_json(silent=True) or {}
+    import marko_chat
+    out = marko_chat.answer(
+        command=(body.get("command") or "").strip() or "do_now",
+        run_id=(body.get("run_id") or None),
+        biz_slug=(body.get("biz_slug") or None),
+        free_text=(body.get("free_text") or None),
+    )
+    return jsonify(out)
+
+
+# ---------- Leak engine demo dashboard (N004) ----------
+#
+# Four routes, all token-gated by the existing ADMIN_TOKEN pattern:
+#   GET /leaks                                  -- preset + recent runs
+#   GET /leaks/run/<run_id>                     -- business list for a run
+#   GET /leaks/run/<run_id>/<biz_slug>          -- single-business report
+#   GET /leaks/run/<run_id>/<biz_slug>/screenshot/<which>
+#                                               -- raw PNG file
+
+
+def _leaks_token_gate():
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if provided != expected:
+        return Response("forbidden", status=403, mimetype="text/plain")
+    return None
+
+
+@app.route("/leaks", methods=["GET"])
+def leaks_index():
+    gate = _leaks_token_gate()
+    if gate is not None:
+        return gate
+    import marko_leak_dashboard as mld
+    return render_template(
+        "leaks.html",
+        token=(request.args.get("token") or "").strip(),
+        presets=mld.available_presets(),
+        runs=mld.list_runs(),
+        live_send_off=(
+            (os.environ.get("MARKO_QUOTE_LIVE_SEND") or "").strip() != "1"
+            and (os.environ.get("MARKO_OUTREACH_LIVE") or "").strip() != "1"
+        ),
+    )
+
+
+@app.route("/leaks/run/<run_id>", methods=["GET"])
+def leaks_run(run_id):
+    gate = _leaks_token_gate()
+    if gate is not None:
+        return gate
+    import marko_leak_dashboard as mld
+    run = mld.load_run(run_id)
+    if not run:
+        return Response(f"run not found: {run_id}", status=404,
+                        mimetype="text/plain")
+    return render_template(
+        "leaks.html",
+        token=(request.args.get("token") or "").strip(),
+        presets=mld.available_presets(),
+        runs=mld.list_runs(),
+        active_run=run,
+        live_send_off=(
+            (os.environ.get("MARKO_QUOTE_LIVE_SEND") or "").strip() != "1"
+            and (os.environ.get("MARKO_OUTREACH_LIVE") or "").strip() != "1"
+        ),
+    )
+
+
+@app.route("/leaks/run/<run_id>/<biz_slug>", methods=["GET"])
+def leaks_report(run_id, biz_slug):
+    gate = _leaks_token_gate()
+    if gate is not None:
+        return gate
+    import marko_leak_dashboard as mld
+    report = mld.load_report(run_id, biz_slug)
+    if not report:
+        return Response("report not found", status=404, mimetype="text/plain")
+    return render_template(
+        "leak_report.html",
+        token=(request.args.get("token") or "").strip(),
+        run_id=run_id,
+        biz_slug=biz_slug,
+        report=report,
+    )
+
+
+@app.route("/leaks/run/<run_id>/<biz_slug>/audit.pdf", methods=["GET"])
+def leaks_audit_pdf(run_id, biz_slug):
+    """Server-rendered 1-page PDF audit (N006). Lazy: renders on first
+    hit, caches under leak_reports/<run>/<biz>/audit.pdf, streams from
+    disk thereafter. ?force=1 rebuilds the cache.
+    """
+    gate = _leaks_token_gate()
+    if gate is not None:
+        return gate
+    import marko_pdf
+    force = (request.args.get("force") or "").strip() == "1"
+    try:
+        pdf_path = marko_pdf.render_audit_pdf(run_id, biz_slug, force=force)
+    except FileNotFoundError:
+        return Response("report not found", status=404,
+                        mimetype="text/plain")
+    except marko_pdf.PdfRenderError as exc:
+        # Honest 503 -- never hand back a fake/placeholder PDF
+        return Response(f"PDF renderer unavailable: {exc}",
+                        status=503, mimetype="text/plain")
+    with open(pdf_path, "rb") as fh:
+        data = fh.read()
+    headers = {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": f"inline; filename=\"{biz_slug}-audit.pdf\"",
+        "Cache-Control": "no-cache",
+    }
+    return Response(data, headers=headers)
+
+
+@app.route("/leaks/run/<run_id>/<biz_slug>/screenshot/<which>",
+           methods=["GET"])
+def leaks_screenshot(run_id, biz_slug, which):
+    gate = _leaks_token_gate()
+    if gate is not None:
+        return gate
+    import marko_leak_dashboard as mld
+    path = mld.screenshot_path(run_id, biz_slug, which)
+    if not path:
+        return Response("screenshot not found", status=404,
+                        mimetype="text/plain")
+    with open(path, "rb") as fh:
+        data = fh.read()
+    return Response(data, mimetype="image/png")
+
+
 # ---------- Operator cockpit (N-MARKO-OPERATOR-COCKPIT) ----------
 
 

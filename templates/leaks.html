@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a0c0e">
+  <title>MARKO Internet Leak Engine</title>
+  <style>
+    :root {
+      --bg: #0a0c0e; --panel: #141a21; --panel-2: #1b232c;
+      --border: #232c36; --text: #e8eef5; --muted: #8a98a8;
+      --accent: #00d68f; --money: #ffd24c; --hot: #ff5c5c;
+      --warm: #ffb366; --info: #4cb3ff; --good: #00ffa6;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); }
+    body {
+      font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI",
+            system-ui, sans-serif;
+      padding: 14px 14px calc(28px + env(safe-area-inset-bottom));
+      max-width: 880px; margin: 0 auto;
+    }
+    h1, h2, h3 { margin: 0; }
+    h1 { font-size: 24px; letter-spacing: -0.01em; }
+    h2 { font-size: 13px; text-transform: uppercase; color: var(--muted);
+         letter-spacing: .1em; margin: 22px 0 10px; }
+    .sub { color: var(--muted); margin: 4px 0 0; font-size: 14px; }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .banner {
+      margin: 14px 0 4px; padding: 10px 12px; border-radius: 8px;
+      background: #0e1c14; border: 1px solid #1e6c4a;
+      color: var(--good); font-size: 13px;
+    }
+    .banner.live { background: #1c0e0e; border-color: #6c1e1e; color: var(--hot); }
+
+    .grid-3 { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    @media (min-width: 600px) {
+      .grid-3 { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (min-width: 800px) {
+      .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px;
+    }
+    .preset {
+      display: block; color: var(--text); text-decoration: none;
+      min-height: 56px;
+    }
+    .preset .label { font-weight: 600; }
+    .preset .meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .preset.disabled {
+      background: #0e131a; border-style: dashed; color: var(--muted);
+      pointer-events: none;
+    }
+    .preset .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; background: var(--panel-2); color: var(--muted);
+      margin-top: 6px;
+    }
+    .preset.available .badge { background: #0e1c14; color: var(--good);
+                               border: 1px solid #1e6c4a; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 8px; border-bottom: 1px solid var(--border);
+             text-align: left; font-size: 14px; vertical-align: top; }
+    th { color: var(--muted); font-weight: 500; font-size: 12px;
+         text-transform: uppercase; letter-spacing: .08em; }
+    td.score { font-weight: 600; }
+    td.score.HIGH   { color: var(--hot); }
+    td.score.MEDIUM { color: var(--warm); }
+    td.score.LOW    { color: var(--info); }
+    td.score.MIN    { color: var(--muted); }
+    .pill {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; background: var(--panel-2); color: var(--muted);
+    }
+    .pill.scan-failed { background: #1c0e0e; color: var(--hot); }
+    .row-link {
+      display: inline-block; background: var(--panel-2);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 10px; color: var(--text);
+    }
+
+    /* runs list (right column on wide; full width on mobile) */
+    .runs li { padding: 8px 10px; border-bottom: 1px solid var(--border);
+               list-style: none; display: flex; gap: 10px;
+               justify-content: space-between; align-items: center; }
+    .runs ul { padding: 0; margin: 0; }
+    .runs .meta { color: var(--muted); font-size: 12px; }
+
+    .footer {
+      color: var(--muted); font-size: 12px;
+      margin-top: 32px; text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MARKO Internet Leak Engine</h1>
+    <p class="sub">Find local businesses leaking leads, trust, and bookings.</p>
+  </header>
+
+  {% if live_send_off %}
+    <div class="banner" data-test="safety-banner">
+      Live sending is OFF. Nothing emailed. Nothing dialed. This dashboard is read-only.
+    </div>
+  {% else %}
+    <div class="banner live" data-test="safety-banner">
+      LIVE send paths are ENABLED in env. Treat outreach blocks below with care.
+    </div>
+  {% endif %}
+
+  <h2>Demo presets</h2>
+  <div class="grid-3" data-test="presets">
+    {% for p in presets %}
+      {% if p.available %}
+        <a class="card preset available" data-test="preset"
+           data-preset-available="1"
+           href="/leaks/run/{{ p.latest_run_id }}{% if token %}?token={{ token }}{% endif %}">
+          <div class="label">{{ p.city }} — {{ p.niche }}</div>
+          <div class="meta">{{ p.report_count }} report(s) · {{ p.started_at }}</div>
+          <div class="badge">verified scan</div>
+        </a>
+      {% else %}
+        <div class="card preset disabled" data-test="preset"
+             data-preset-available="0">
+          <div class="label">{{ p.city }} — {{ p.niche }}</div>
+          <div class="meta">{{ p.no_scan_message }}</div>
+          <div class="badge">no data yet</div>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+
+  {% if active_run %}
+    <h2>Run · {{ active_run.run_id }}</h2>
+    <div class="card" style="margin-bottom: 10px;">
+      <div><b>{{ active_run.summary.city }}</b> &middot;
+           niche input: <b>{{ active_run.summary.niche_input or active_run.summary.niche }}</b>
+           {% if active_run.summary.niche_key_resolved %}
+             (resolved to <code>{{ active_run.summary.niche_key_resolved }}</code>)
+           {% endif %}
+      </div>
+      <div class="meta">
+        started {{ active_run.summary.started_at }} ·
+        discovered {{ active_run.summary.discovered }} ·
+        scanned {{ active_run.summary.scanned }} ·
+        scan failures {{ active_run.summary.scan_failures }} ·
+        source: {{ active_run.summary.discovery_source }}
+      </div>
+    </div>
+
+    <div class="card">
+      <table data-test="business-list">
+        <tr>
+          <th>Business</th><th>Score</th><th>Top leak</th>
+          <th>Confidence</th><th>Offer</th><th></th>
+        </tr>
+        {% for r in active_run.rows %}
+          {% set band = "HIGH" if r.leak_score >= 70 else ("MEDIUM" if r.leak_score >= 40 else ("LOW" if r.leak_score >= 20 else "MIN")) %}
+          <tr data-test="biz-row">
+            <td>
+              <div><b>{{ r.business_name }}</b></div>
+              {% if r.scan_failed %}
+                <span class="pill scan-failed">scan failed</span>
+              {% endif %}
+            </td>
+            <td class="score {{ band }}">{{ r.leak_score }}</td>
+            <td>{{ r.top_leak_label }}</td>
+            <td>{{ r.confidence_score }}</td>
+            <td>{{ r.suggested_offer }}</td>
+            <td>
+              <a class="row-link" data-test="open-report"
+                 href="/leaks/run/{{ active_run.run_id }}/{{ r.biz_slug }}{% if token %}?token={{ token }}{% endif %}">
+                open report &rarr;
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+      </table>
+    </div>
+  {% endif %}
+
+  <h2>All scans on disk ({{ runs|length }})</h2>
+  <div class="card runs">
+    {% if not runs %}
+      <div class="muted">No scans on disk yet. Run
+        <code>python marko_leak_engine.py --city ... --niche ...</code>.
+      </div>
+    {% else %}
+      <ul>
+        {% for r in runs[:20] %}
+          <li>
+            <span>
+              <a href="/leaks/run/{{ r.run_id }}{% if token %}?token={{ token }}{% endif %}">{{ r.run_id }}</a>
+              <span class="meta"> &middot; {{ r.city }} · {{ r.niche_input }} · {{ r.report_count }} report(s)</span>
+            </span>
+            <span class="meta">{{ r.started_at }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+
+  <p class="footer">MARKO Internet Leak Engine · public-data only · operator UI</p>
+</body>
+</html>
