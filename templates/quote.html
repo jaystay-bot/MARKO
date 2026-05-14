@@ -82,6 +82,14 @@
     <h1>Get your moving quote</h1>
     <div class="sub">Local Virginia movers. One form. Reply within the hour during business hours.</div>
 
+    {% if not submitted_ok %}
+    <ul style="list-style:none; padding:0; margin:0 0 16px; color:var(--muted); font-size:13px;">
+      <li>Takes about 60 seconds on your phone.</li>
+      <li>One local mover gets your request -- no spam, no auctions.</li>
+      <li>You set the move date, ZIP, and size. They reply.</li>
+    </ul>
+    {% endif %}
+
     {% if submitted_ok %}
       <div class="ok">
         <strong>Request received.</strong>
@@ -108,6 +116,9 @@
         </div>
       {% endif %}
       <form method="POST" action="/quote" autocomplete="on" novalidate>
+        <input type="hidden" name="attr_source" value="{{ attr_source or '' }}">
+        <input type="hidden" name="attr_campaign" value="{{ attr_campaign or '' }}">
+        <input type="hidden" name="attr_mover_hint" value="{{ attr_mover_hint or '' }}">
         <label class="req" for="customer_name">Your name</label>
         <input id="customer_name" name="customer_name" type="text" required value="{{ form.customer_name or '' }}">
 

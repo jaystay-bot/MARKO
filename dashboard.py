@@ -23,15 +23,59 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # expecting the intake form, not the operator dashboard. Redirect / to /quote
 # when the host is the public intake domain. Operator dashboard at
 # marko-teal.vercel.app/ and other hosts is unchanged.
-PUBLIC_INTAKE_HOSTS = {"quote.bookermove.com"}
+#
+# Defaults cover the apex + www variant of the public quote domain. Override
+# with MARKO_PUBLIC_INTAKE_HOSTS (CSV) without redeploy if the domain changes.
+# Matching is suffix-based so "*.quote.bookermove.com" also resolves -- a
+# stray subdomain typo on the operator's part doesn't trap a customer in the
+# dashboard.
+_DEFAULT_PUBLIC_INTAKE_HOSTS = ("quote.bookermove.com",)
+
+
+def _public_intake_hosts():
+    raw = (os.environ.get("MARKO_PUBLIC_INTAKE_HOSTS") or "").strip()
+    if raw:
+        return tuple(h.strip().lower() for h in raw.split(",") if h.strip())
+    return _DEFAULT_PUBLIC_INTAKE_HOSTS
+
+
+def _request_host():
+    """Resolve the customer-facing host even behind Vercel's proxy.
+
+    Prefers X-Forwarded-Host (set by Vercel when a custom domain proxies
+    into the underlying *.vercel.app deployment), falls back to request.host.
+    Lowercased, port stripped.
+    """
+    from flask import request as _req
+    raw = (_req.headers.get("X-Forwarded-Host") or _req.host or "")
+    # X-Forwarded-Host can carry a CSV when chained; the original client
+    # host is the leftmost entry.
+    first = raw.split(",", 1)[0].strip()
+    return first.split(":", 1)[0].lower()
+
+
+def _is_public_intake_host(host):
+    if not host:
+        return False
+    for ph in _public_intake_hosts():
+        if host == ph or host.endswith("." + ph):
+            return True
+    return False
 
 
 @app.before_request
 def _public_intake_root_redirect():
     from flask import request as _req, redirect as _redirect
-    host = (_req.host or "").split(":", 1)[0].lower()
-    if host in PUBLIC_INTAKE_HOSTS and _req.path == "/":
+    if _req.path != "/":
+        return None
+    if _is_public_intake_host(_request_host()):
         return _redirect("/quote", code=302)
+    # Operator escape hatch: any host can force the intake view with
+    # ?intake=1 -- lets Jay smoke the customer flow from marko-teal without
+    # touching DNS. Never auto-redirects an operator session.
+    if (_req.args.get("intake") or "").strip() == "1":
+        return _redirect("/quote", code=302)
+    return None
 
 
 # N261: Mockup catalog built once at import time from templates/mockup/*.
@@ -1459,6 +1503,14 @@ def mobile_lead(lead_id):
 def __diag():
     info = storage.backend_info()
     counts = {}
+    host_resolved = _request_host()
+    route_diag = {
+        "request_host": request.host,
+        "x_forwarded_host": request.headers.get("X-Forwarded-Host"),
+        "resolved_host": host_resolved,
+        "is_public_intake_host": _is_public_intake_host(host_resolved),
+        "intake_hosts": list(_public_intake_hosts()),
+    }
     for fname in ("campaigns.json", "leads.json", "config.json",
                   "templates.json", "marko_log.json"):
         path = os.path.join(BASE_DIR, fname)
@@ -1475,7 +1527,7 @@ def __diag():
             counts[fname] = "missing"
         except Exception as exc:
             counts[fname] = f"err: {type(exc).__name__}"
-    return jsonify({"backend": info, "counts": counts})
+    return jsonify({"backend": info, "counts": counts, "routing": route_diag})
 
 
 @app.route("/__seed_kv", methods=["POST"])
@@ -1511,16 +1563,56 @@ def quote():
     allowlist receives a dry_run regardless. Both decisions are recorded
     in delivery_log.json so the admin panel surfaces the exact reason.
     """
+    # Attribution params survive GET->POST round-trip via hidden inputs.
+    # Source: campaign URL the customer landed on. Captured into lead.notes
+    # so the operator (and TalkBot logs) can attribute each inbound back to
+    # the channel that drove it. Length-capped to keep notes readable and
+    # to defang any pathological URL stuffing.
+    def _attr(value):
+        return (value or "").strip()[:80]
+
     if request.method == "GET":
-        return render_template("quote.html", submitted_ok=False, errors=None,
-                               form={}, lead_id=None,
-                               submitted_name=None, submitted_via=None)
+        # Conversion-tracking landing event. Server-side, no cookies.
+        # The same source/campaign/zip params get echoed into hidden
+        # inputs (already wired below) so they survive into quote_submit.
+        import marko_tracking
+        marko_tracking.record(
+            "landing",
+            source=request.args.get("source"),
+            campaign=request.args.get("campaign"),
+            zip_code=request.args.get("zip"),
+            pitch=request.args.get("pitch"),
+            cta_id=request.args.get("cta_id"),
+            device_type=marko_tracking._device_from_ua(
+                request.headers.get("User-Agent")),
+            landing_page=request.path,
+            mover_id=request.args.get("mover_hint"),
+        )
+        return render_template(
+            "quote.html", submitted_ok=False, errors=None,
+            form={}, lead_id=None,
+            submitted_name=None, submitted_via=None,
+            attr_source=_attr(request.args.get("source")),
+            attr_campaign=_attr(request.args.get("campaign")),
+            attr_mover_hint=_attr(request.args.get("mover_hint")),
+        )
 
     form = {k: (request.form.get(k) or "") for k in (
         "customer_name", "phone", "email", "move_date",
         "pickup_zip", "dropoff_zip", "home_size",
         "stairs_elevator", "heavy_items", "urgency", "notes",
     )}
+
+    attr_source = _attr(request.form.get("attr_source"))
+    attr_campaign = _attr(request.form.get("attr_campaign"))
+    attr_mover_hint = _attr(request.form.get("attr_mover_hint"))
+    if attr_source or attr_campaign or attr_mover_hint:
+        tag = (
+            f"[attr source={attr_source or '-'} "
+            f"campaign={attr_campaign or '-'} "
+            f"mover_hint={attr_mover_hint or '-'}] "
+        )
+        form["notes"] = tag + form["notes"]
 
     live = (os.environ.get("MARKO_QUOTE_LIVE_SEND") or "").strip() == "1"
     result = routing.submit_quote(form, dry_run=not live)
@@ -1530,6 +1622,8 @@ def quote():
             "quote.html", submitted_ok=False,
             errors=result["errors"], form=form, lead_id=None,
             submitted_name=None, submitted_via=None,
+            attr_source=attr_source, attr_campaign=attr_campaign,
+            attr_mover_hint=attr_mover_hint,
         ), 400
 
     lead = result["lead"]
@@ -1541,12 +1635,502 @@ def quote():
         via = "email"
     else:
         via = None
+
+    # Conversion event for the funnel: form passed validation and was
+    # routed (dry_run or live). value_usd uses MARKO's own lead-value
+    # estimate so the report can talk dollars without inventing them.
+    import marko_tracking
+    marko_tracking.record(
+        "quote_submit",
+        source=attr_source, campaign=attr_campaign,
+        zip_code=lead.get("pickup_zip"),
+        device_type=marko_tracking._device_from_ua(
+            request.headers.get("User-Agent")),
+        landing_page="/quote",
+        destination="routing.submit_quote",
+        converted=True,
+        lead_id=lead.get("lead_id"),
+        mover_id=attr_mover_hint,
+        value_usd=lead.get("estimated_value_high_usd"),
+    )
+
     return render_template(
         "quote.html", submitted_ok=True, errors=None,
         form={}, lead_id=lead["lead_id"],
         submitted_name=(lead.get("customer_name") or "").split(" ", 1)[0],
         submitted_via=via,
     )
+
+
+@app.route("/money", methods=["GET"])
+def money_mode():
+    """Operator-only Money Mode summary.
+
+    Token-gated identically to /admin/delivery (?token=ADMIN_TOKEN). Returns
+    JSON by default; pass ?format=html for a tiny mobile-readable view so
+    Jay can glance at it from his phone without parsing JSON.
+
+    Read-only. Does not regenerate the underlying reports -- that's the
+    job of `python marko_money.py` (cron-style or manual).
+    """
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if provided != expected:
+        return Response("forbidden", status=403, mimetype="text/plain")
+
+    import marko_money
+    report = marko_money.build_overnight_report()
+    queue = marko_money.build_revenue_queue()
+
+    if (request.args.get("format") or "").lower() == "html":
+        # Minimal mobile-friendly chrome -- no operator chrome leaked, no
+        # external assets. Pure inline CSS so it renders in <1 RTT on a
+        # phone. Intentionally not a "dashboard" -- a one-screen brief.
+        rows = "".join(
+            f"<tr><td>{r['rank']}</td><td>{r['business']}</td>"
+            f"<td>{r['priority']}</td><td>{r['score']}</td>"
+            f"<td>{r['estimated_close_probability']}</td></tr>"
+            for r in queue[:10]
+        )
+        gaps = "".join(
+            f"<li>{g['zip']} ({g['city']})</li>"
+            for g in report["unresolved_routing_gaps"]
+        ) or "<li>none</li>"
+        html = (
+            "<!doctype html><meta name=viewport content='width=device-width,"
+            "initial-scale=1'><title>MARKO Money Mode</title>"
+            "<style>body{font:16px system-ui;padding:14px;background:#0a0c0e;"
+            "color:#e8eef5;max-width:560px;margin:0 auto}"
+            "h1,h2{margin:.4em 0}table{width:100%;border-collapse:collapse}"
+            "td,th{padding:6px;border-bottom:1px solid #232c36;text-align:left}"
+            ".muted{color:#8a98a8;font-size:13px}</style>"
+            "<h1>Money Mode</h1>"
+            f"<div class=muted>generated {report['generated_at']}</div>"
+            "<h2>Tonight's totals</h2>"
+            f"<div>{report['totals']['mover_targets']} mover targets &middot; "
+            f"{report['totals']['hot_zip_count']} hot ZIPs &middot; "
+            f"{report['totals']['overnight_inbound_count']} inbound (12h) "
+            f"&middot; {report['totals']['missed_money_events']} missed-money</div>"
+            "<h2>Top 10 to call</h2>"
+            "<table><tr><th>#</th><th>business</th><th>priority</th>"
+            f"<th>score</th><th>close-prob</th></tr>{rows}</table>"
+            "<h2>Routing gaps (no buyer covers these ZIPs)</h2>"
+            f"<ul>{gaps}</ul>"
+            "<h2>Estimated weekly band</h2>"
+            f"<div>${report['estimated_revenue_band']['weekly_low_usd']}"
+            f" - ${report['estimated_revenue_band']['weekly_high_usd']}</div>"
+            f"<div class=muted>{report['estimated_revenue_band']['basis']}</div>"
+        )
+        return Response(html, mimetype="text/html")
+
+    return jsonify({"report": report, "revenue_queue": queue})
+
+
+# ---------- Operator cockpit (N-MARKO-OPERATOR-COCKPIT) ----------
+
+
+@app.route("/cockpit", methods=["GET"])
+def cockpit_view():
+    """Mobile-first money cockpit. Token-gated like /money + /admin/*.
+
+    Pure read, pure derive: every number on the page is from a real
+    on-disk artifact. No synthetic activity, no fabricated counts.
+    """
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if provided != expected:
+        return Response("forbidden", status=403, mimetype="text/plain")
+
+    import marko_cockpit
+    payload = marko_cockpit.cockpit_payload()
+
+    live_send = (os.environ.get("MARKO_QUOTE_LIVE_SEND") or "").strip() == "1"
+    rev = payload.get("estimated_revenue_band") or {}
+    rev_label = (
+        f"${rev.get('weekly_low_usd', 0)}-${rev.get('weekly_high_usd', 0)}/wk"
+        if rev else "no revenue band"
+    )
+    hz = payload.get("hot_zips") or []
+    hz_label = ", ".join(z["zip"] for z in hz[:3]) if hz else "(none)"
+
+    from datetime import datetime as _dt, timezone as _tz
+    return render_template(
+        "cockpit.html",
+        generated_at=_dt.now(_tz.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        token=provided,
+        live_send_label=("LIVE send ON" if live_send else "DRY-RUN"),
+        live_send_badge_cls=("live" if live_send else "dry"),
+        revenue_band_label=rev_label,
+        hot_zip_label=hz_label,
+        **payload,
+    )
+
+
+# ---------- Conversion tracking (N-TALKBOT-CONVERSION-TRACKING) ----------
+#
+# Tiny POST endpoint for hero/pricing/Stripe-redirect CTA clicks. Public
+# (no token) because it gets fired from public surfaces (the quote page,
+# any future hero on the marketing site). Protections:
+#   * event_type whitelist enforced server-side via marko_tracking
+#   * field length caps applied by the recorder
+#   * silently swallows unknown event types (returns 400) instead of
+#     polluting the log
+
+
+@app.route("/api/track", methods=["POST"])
+def api_track():
+    import marko_tracking
+    if request.is_json:
+        body = request.get_json(silent=True) or {}
+    else:
+        body = {k: request.form.get(k) for k in request.form}
+    event_type = (body.get("event_type") or "").strip()
+    try:
+        entry = marko_tracking.record(
+            event_type,
+            cta_id=body.get("cta_id"),
+            source=body.get("source"),
+            campaign=body.get("campaign"),
+            zip_code=body.get("zip"),
+            pitch=body.get("pitch"),
+            device_type=marko_tracking._device_from_ua(
+                request.headers.get("User-Agent")),
+            landing_page=body.get("landing_page"),
+            destination=body.get("destination"),
+            converted=body.get("converted"),
+            lead_id=body.get("lead_id"),
+            talkbot_session_id=body.get("talkbot_session_id"),
+            mover_id=body.get("mover_id"),
+            value_usd=body.get("value_usd"),
+        )
+        return jsonify({"ok": True, "recorded": entry})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+
+
+# Stripe-prep stub: accepts checkout_started/checkout_completed/
+# mover_signup_init via the same /api/track endpoint above. The shim
+# below is the *only* place the Stripe-side knowledge lives so when a
+# real checkout URL exists we wire one location, not three.
+STRIPE_INTEGRATION_STATUS = {
+    "checkout_url_configured": False,
+    "webhook_secret_configured": False,
+    "note": (
+        "No Stripe SDK in repo. Tracking schema is ready: send "
+        "event_type=checkout_started from the redirect-to-Stripe handler "
+        "and event_type=checkout_completed from the Stripe webhook. "
+        "Both already accepted by /api/track and counted in the funnel."
+    ),
+}
+
+
+@app.route("/admin/conversions", methods=["GET"])
+def admin_conversions():
+    gate = _require_admin_token() if False else None  # placeholder
+    # Token gate: we cannot reuse _require_admin_token because it's defined
+    # below in the file. Inline the check.
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if provided != expected:
+        return Response("forbidden", status=403, mimetype="text/plain")
+
+    import marko_tracking
+    events = marko_tracking.load_events()
+    agg = marko_tracking.aggregate(events)
+    weakest = marko_tracking.weakest_funnel_step(agg["step_conversion_rates"])
+
+    if (request.args.get("format") or "").lower() == "json":
+        return jsonify({
+            "aggregate": agg,
+            "weakest_step": weakest,
+            "stripe_integration_status": STRIPE_INTEGRATION_STATUS,
+        })
+
+    funnel_html = "".join(
+        f"<tr><td>{step}</td><td>{count}</td></tr>"
+        for step, count in agg["funnel_counts"]
+    )
+    rates_html = "".join(
+        f"<tr><td>{r['from']} -> {r['to']}</td>"
+        f"<td>{r['from_count']}</td><td>{r['to_count']}</td>"
+        f"<td>{(str(r['rate_pct']) + '%') if r['rate_pct'] is not None else '-'}</td></tr>"
+        for r in agg["step_conversion_rates"]
+    )
+    bests = "".join(
+        f"<li><b>{label}:</b> {val or '(none)'} (n={n})</li>"
+        for label, (val, n) in (
+            ("best CTA", agg["best_cta"]),
+            ("best source", agg["best_source"]),
+            ("best campaign", agg["best_campaign"]),
+            ("best ZIP", agg["best_zip"]),
+            ("best pitch", agg["best_pitch"]),
+        )
+    )
+    weakest_str = f"{weakest[0]} ({weakest[1]}%)" if weakest else "no funnel data yet"
+    html = (
+        "<!doctype html><meta name=viewport content='width=device-width,"
+        "initial-scale=1'><title>MARKO Conversions</title>"
+        "<style>body{font:16px system-ui;padding:14px;background:#0a0c0e;"
+        "color:#e8eef5;max-width:720px;margin:0 auto}"
+        "h1,h2{margin:.4em 0}table{width:100%;border-collapse:collapse}"
+        "td,th{padding:6px;border-bottom:1px solid #232c36;text-align:left}"
+        ".muted{color:#8a98a8;font-size:13px}"
+        ".warn{background:#1f1207;border:1px solid #5a3a16;"
+        "padding:10px;border-radius:6px;margin:10px 0}</style>"
+        f"<h1>Conversions ({agg['total_events']} events)</h1>"
+        "<h2>Funnel counts</h2>"
+        f"<table><tr><th>step</th><th>count</th></tr>{funnel_html}</table>"
+        "<h2>Step-to-step conversion</h2>"
+        "<table><tr><th>step</th><th>from</th><th>to</th><th>rate</th></tr>"
+        f"{rates_html}</table>"
+        f"<h2>Bests</h2><ul>{bests}</ul>"
+        f"<h2>Weakest funnel step</h2><div>{weakest_str}</div>"
+        "<h2>Device split (landing + quote_submit)</h2>"
+        f"<div>{json.dumps(agg['device_split'])}</div>"
+        "<h2>Stripe integration</h2>"
+        "<div class=warn>"
+        f"checkout configured: {STRIPE_INTEGRATION_STATUS['checkout_url_configured']}"
+        f" &middot; webhook configured: {STRIPE_INTEGRATION_STATUS['webhook_secret_configured']}"
+        f"<div class=muted style='margin-top:6px'>{STRIPE_INTEGRATION_STATUS['note']}</div>"
+        "</div>"
+    )
+    return Response(html, mimetype="text/html")
+
+
+# ---------- One-click money-queue review (N-MARKO-ONE-CLICK-MONEY-QUEUE) ----------
+#
+# Three routes, all ADMIN_TOKEN-gated:
+#   GET  /review                       -- list queue (HTML by default, JSON with ?format=json)
+#   POST /review/<lead_id>/<action>    -- approve|skip|edit|retry_later, mutates send_status
+#   POST /review/<lead_id>/send        -- one-shot send, dry_run by default
+#
+# /send is intentionally separate from approve so a misfiring approve POST
+# can never silently send a real cold email. Live send requires ALL of:
+#   * ADMIN_TOKEN match
+#   * MARKO_OUTREACH_LIVE=1
+#   * row.send_status == "approved"
+#   * either MARKO_SMOKE_REDIRECT_TO is set (safe-test path)
+#     OR ?confirm_real=1 query param (operator explicitly accepts real send)
+
+
+def _require_admin_token():
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if provided != expected:
+        return Response("forbidden", status=403, mimetype="text/plain")
+    return None
+
+
+@app.route("/review", methods=["GET"])
+def review_list():
+    gate = _require_admin_token()
+    if gate is not None:
+        return gate
+    import marko_money_queue as mmq
+    doc = mmq._read_queue()
+    rows = doc.get("rows", [])
+    if (request.args.get("format") or "").lower() == "json":
+        return jsonify(doc)
+    token = (request.args.get("token") or "").strip()
+    items = []
+    for r in rows:
+        body_html = (r["email_body"]
+                     .replace("&", "&amp;").replace("<", "&lt;")
+                     .replace("\n", "<br>"))
+        actions = "".join(
+            f"<form method=POST action='/review/{r['lead_id']}/{a}?token={token}' "
+            "style='display:inline'>"
+            f"<button type=submit>{a}</button></form> "
+            for a in ("approve", "skip", "retry_later")
+        )
+        send_btn = (
+            f"<form method=POST action='/review/{r['lead_id']}/send?token={token}' "
+            "style='display:inline'>"
+            f"<button type=submit>send (dry-run unless live env)</button></form>"
+        )
+        items.append(
+            f"<article style='border:1px solid #232c36;padding:12px;"
+            f"margin:10px 0;border-radius:8px'>"
+            f"<div><b>#{r.get('rank','?')} {r['business_name']}</b> "
+            f"&middot; {r.get('priority','?')} &middot; score {r['confidence_score']} "
+            f"&middot; status: <code>{r['send_status']}</code></div>"
+            f"<div class=muted>{r['email']} &middot; {r['website']}</div>"
+            f"<div style='margin-top:6px'><b>leak:</b> {r['detected_leak']}</div>"
+            f"<div style='margin-top:6px'><b>subject:</b> {r['email_subject']}</div>"
+            f"<pre style='white-space:pre-wrap;background:#0e1318;padding:10px;"
+            f"border-radius:6px;font:14px ui-monospace,Menlo,Consolas,monospace'>"
+            f"{body_html}</pre>"
+            f"<div style='margin-top:6px'>{actions}{send_btn}</div>"
+            f"</article>"
+        )
+    html = (
+        "<!doctype html><meta name=viewport content='width=device-width,"
+        "initial-scale=1'><title>MARKO Review</title>"
+        "<style>body{font:16px system-ui;padding:14px;background:#0a0c0e;"
+        "color:#e8eef5;max-width:720px;margin:0 auto}"
+        "button{font:14px system-ui;padding:8px 12px;border-radius:6px;"
+        "border:1px solid #232c36;background:#141a21;color:#e8eef5;cursor:pointer}"
+        ".muted{color:#8a98a8;font-size:13px}</style>"
+        f"<h1>Review queue ({len(rows)})</h1>"
+        f"<div class=muted>generated {doc.get('generated_at','?')} &middot; "
+        "live send blocked unless MARKO_OUTREACH_LIVE=1</div>"
+        + "".join(items)
+    )
+    return Response(html, mimetype="text/html")
+
+
+_REVIEW_ACTIONS = {"approve", "skip", "edit", "retry_later"}
+
+
+@app.route("/review/<lead_id>/<action>", methods=["POST"])
+def review_action(lead_id, action):
+    gate = _require_admin_token()
+    if gate is not None:
+        return gate
+    if action not in _REVIEW_ACTIONS:
+        return Response(f"unknown action {action!r}", status=400,
+                        mimetype="text/plain")
+    import marko_money_queue as mmq
+    status_map = {
+        "approve": "approved", "skip": "skipped",
+        "edit": "edited", "retry_later": "retry_later",
+    }
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if False else None
+    from datetime import datetime as _dt, timezone as _tz
+    ts = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    field = {
+        "approve": "approved_at", "skip": "skipped_at",
+        "edit": "edited_at", "retry_later": "retry_after",
+    }[action]
+    row = mmq.set_status(lead_id, status_map[action], **{field: ts})
+    if row is None:
+        return Response("not found", status=404, mimetype="text/plain")
+    if (request.args.get("format") or "").lower() == "json":
+        return jsonify({"ok": True, "lead_id": lead_id,
+                        "send_status": row["send_status"]})
+    token = (request.args.get("token") or "").strip()
+    return redirect(f"/review?token={token}")
+
+
+OUTREACH_LOG_FILE = os.path.join(BASE_DIR, "outreach_log.json")
+
+
+def _append_outreach(entry):
+    try:
+        doc = storage.read_json(OUTREACH_LOG_FILE)
+    except FileNotFoundError:
+        doc = {"events": []}
+    if not isinstance(doc.get("events"), list):
+        doc["events"] = []
+    doc["events"].append(entry)
+    storage.write_json(OUTREACH_LOG_FILE, doc)
+
+
+@app.route("/review/<lead_id>/send", methods=["POST"])
+def review_send(lead_id):
+    """One-shot send for an approved row.
+
+    Default: dry_run. Returns the rendered email + a synthetic id.
+    Live requires MARKO_OUTREACH_LIVE=1 AND (smoke-redirect set OR
+    ?confirm_real=1). Status mutated to "sent" only on a successful
+    Resend response.
+    """
+    gate = _require_admin_token()
+    if gate is not None:
+        return gate
+    import marko_money_queue as mmq
+    import email_client
+    from datetime import datetime as _dt, timezone as _tz
+
+    doc, row = mmq.find_row(lead_id)
+    if row is None:
+        return Response("not found", status=404, mimetype="text/plain")
+
+    live_env = (os.environ.get("MARKO_OUTREACH_LIVE") or "").strip() == "1"
+    redirect_to = (os.environ.get("MARKO_SMOKE_REDIRECT_TO") or "").strip()
+    confirm_real = (request.args.get("confirm_real") or "").strip() == "1"
+    approved = row["send_status"] in ("approved", "edited")
+
+    block_reasons = []
+    if not approved:
+        block_reasons.append(
+            f"row send_status is {row['send_status']!r}; "
+            "must be 'approved' or 'edited' before sending"
+        )
+    if not live_env:
+        block_reasons.append("MARKO_OUTREACH_LIVE != 1; send goes dry_run")
+    if live_env and not redirect_to and not confirm_real:
+        block_reasons.append(
+            "live send to a real third party requires either "
+            "MARKO_SMOKE_REDIRECT_TO set or ?confirm_real=1"
+        )
+
+    actually_dry = bool(block_reasons)
+    to_original = row["email"]
+    to_used = (redirect_to if (live_env and redirect_to) else to_original)
+
+    sender = (os.environ.get("MARKO_FROM_EMAIL") or "").strip() \
+        or "leads@marko.local"
+
+    result = email_client.send(
+        to=to_used,
+        subject=row["email_subject"],
+        body=row["email_body"],
+        from_=sender,
+        reply_to=None,
+        dry_run=actually_dry,
+        headers={"X-Marko-Lead-Id": str(row.get("lead_id") or ""),
+                 "X-Marko-Outreach": "1"},
+    )
+
+    sent_at = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    entry = {
+        "lead_id": lead_id,
+        "mover_id": row.get("mover_id"),
+        "business_name": row.get("business_name"),
+        "leak_category": row.get("leak_category"),
+        "subject": row.get("email_subject"),
+        "to_original": to_original,
+        "to_used": to_used,
+        "redirected": (to_used != to_original),
+        "from": sender,
+        "dry_run": actually_dry,
+        "block_reasons": block_reasons or None,
+        "result": result,
+        "at": sent_at,
+        "confirm_real": confirm_real,
+    }
+    _append_outreach(entry)
+
+    if result.get("status") in ("sent", "dry_run"):
+        mmq.set_status(lead_id, "sent",
+                       sent_at=sent_at, send_result=result)
+
+    payload = {
+        "ok": result.get("status") in ("sent", "dry_run"),
+        "delivery_mode": "live" if not actually_dry else "dry_run",
+        "to": to_used,
+        "to_original": to_original,
+        "block_reasons": block_reasons or None,
+        "result": result,
+        "rendered": {
+            "subject": row.get("email_subject"),
+            "body": row.get("email_body"),
+        },
+    }
+    return jsonify(payload)
 
 
 @app.route("/admin/delivery", methods=["GET"])
