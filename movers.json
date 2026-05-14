@@ -1,0 +1,81 @@
+{
+  "movers": [
+    {
+      "mover_id": "M001",
+      "business_name": "All My Sons Moving & Storage",
+      "email": "info@allmysons.com",
+      "phone": "804-466-3200",
+      "cities_served": ["Richmond", "Henrico", "Chesterfield"],
+      "zip_codes": ["23220", "23221", "23222", "23223", "23224", "23225", "23226", "23227", "23228", "23229", "23230", "23231", "23233", "23234", "23235", "23236", "23238", "23294"],
+      "exclusive": false,
+      "active": true,
+      "source_lead_id": "L013"
+    },
+    {
+      "mover_id": "M002",
+      "business_name": "Mitchell's Movers",
+      "email": "mitchmovers@gmail.com",
+      "phone": "804-920-0646",
+      "cities_served": ["Richmond", "Chesterfield", "Midlothian"],
+      "zip_codes": ["23112", "23113", "23114", "23120", "23220", "23221", "23222", "23234", "23235", "23236", "23237", "23832", "23838"],
+      "exclusive": false,
+      "active": true,
+      "source_lead_id": "L014"
+    },
+    {
+      "mover_id": "M003",
+      "business_name": "Moxie Movers",
+      "email": "booking@moxiemovers.com",
+      "phone": "804-928-1111",
+      "cities_served": ["Richmond", "Henrico", "Chesterfield"],
+      "zip_codes": ["23220", "23221", "23222", "23223", "23224", "23225", "23226", "23227", "23228", "23229", "23230", "23231", "23233", "23234", "23235", "23236", "23238"],
+      "exclusive": false,
+      "active": true,
+      "source_lead_id": "L016"
+    },
+    {
+      "mover_id": "M004",
+      "business_name": "MiniMoves",
+      "email": "Sales1@minimoves1.onmicrosoft.com",
+      "phone": "800-300-6683",
+      "cities_served": ["Richmond"],
+      "zip_codes": ["23220", "23221", "23222", "23223", "23224", "23225", "23226", "23227", "23228", "23229", "23230"],
+      "exclusive": false,
+      "active": true,
+      "source_lead_id": "L017"
+    },
+    {
+      "mover_id": "M005",
+      "business_name": "Mr Moving LLC",
+      "email": "mr.movingllc@gmail.com",
+      "phone": "804-986-9480",
+      "cities_served": ["Richmond", "Chesterfield", "Midlothian"],
+      "zip_codes": ["23112", "23113", "23114", "23120", "23220", "23221", "23234", "23235", "23236", "23237", "23832"],
+      "exclusive": false,
+      "active": true,
+      "source_lead_id": "L019"
+    },
+    {
+      "mover_id": "M006",
+      "business_name": "Rent The Help",
+      "email": "info@rentthehelp.com",
+      "phone": "804-249-9024",
+      "cities_served": ["Richmond"],
+      "zip_codes": ["23220", "23221", "23222", "23223", "23224", "23225", "23226", "23230"],
+      "exclusive": false,
+      "active": true,
+      "source_lead_id": "L020"
+    },
+    {
+      "mover_id": "M007",
+      "business_name": "Mighty Moves",
+      "email": "movers@mightymoves.us",
+      "phone": "804-215-6330",
+      "cities_served": ["Richmond", "Henrico"],
+      "zip_codes": ["23220", "23221", "23222", "23223", "23226", "23227", "23228", "23229", "23230", "23233", "23238", "23294"],
+      "exclusive": false,
+      "active": true,
+      "source_lead_id": "L021"
+    }
+  ]
+}

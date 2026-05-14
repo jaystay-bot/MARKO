@@ -13,6 +13,7 @@ import marko_sequence
 
 import scraper
 import storage
+import routing
 
 app = Flask(__name__)
 
@@ -1485,6 +1486,199 @@ def __seed_kv():
             failed.append(f"{fname}: {exc}")
     body = {"backend": storage.backend_info(), "seeded": seeded, "failed": failed}
     return jsonify(body), (200 if not failed else 500)
+
+
+@app.route("/quote", methods=["GET", "POST"])
+def quote():
+    """Public moving-quote intake. GET renders the form, POST submits.
+
+    Real sends are gated by MARKO_QUOTE_LIVE_SEND=1 (env). The routing
+    engine also enforces MARKO_MOVER_ALLOWLIST: a mover not on the
+    allowlist receives a dry_run regardless. Both decisions are recorded
+    in delivery_log.json so the admin panel surfaces the exact reason.
+    """
+    if request.method == "GET":
+        return render_template("quote.html", submitted_ok=False, errors=None,
+                               form={}, lead_id=None)
+
+    form = {k: (request.form.get(k) or "") for k in (
+        "customer_name", "phone", "email", "move_date",
+        "pickup_zip", "dropoff_zip", "home_size",
+        "stairs_elevator", "heavy_items", "urgency", "notes",
+    )}
+
+    live = (os.environ.get("MARKO_QUOTE_LIVE_SEND") or "").strip() == "1"
+    result = routing.submit_quote(form, dry_run=not live)
+
+    if not result["ok"]:
+        return render_template("quote.html", submitted_ok=False,
+                               errors=result["errors"], form=form, lead_id=None), 400
+
+    return render_template("quote.html", submitted_ok=True, errors=None,
+                           form={}, lead_id=result["lead"]["lead_id"])
+
+
+@app.route("/admin/delivery", methods=["GET"])
+def admin_delivery():
+    """Operator-only delivery verification panel.
+
+    Gated by ?token=<ADMIN_TOKEN>. Shows env-readiness, Resend domain
+    status for MARKO_FROM_EMAIL, and the last 10 routing/delivery events
+    with the exact recipient, Resend message id, and any provider error.
+    """
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if not provided or provided != expected:
+        return Response("forbidden", status=401, mimetype="text/plain")
+
+    env = routing.env_status()
+    domain_check = routing.from_email_domain_verified()
+    try:
+        routed = storage.read_json(routing.ROUTED_FILE).get("events", [])
+    except FileNotFoundError:
+        routed = []
+    try:
+        delivery = storage.read_json(routing.DELIVERY_LOG_FILE).get("events", [])
+    except FileNotFoundError:
+        delivery = []
+    movers = routing.load_movers()
+    return jsonify({
+        "env": env,
+        "from_email_domain": domain_check,
+        "registered_movers": len(movers),
+        "last_routed": list(reversed(routed))[:10],
+        "last_delivery": list(reversed(delivery))[:10],
+    })
+
+
+@app.route("/admin/delivery_smoke", methods=["POST"])
+def admin_delivery_smoke():
+    """One-shot live-delivery smoke for a single allowlisted mover.
+
+    Gated by ?token=<ADMIN_TOKEN>. Form/query field `mover_id` defaults to
+    "M001". Honors MARKO_MOVER_ALLOWLIST and MARKO_SMOKE_REDIRECT_TO; if
+    either gate refuses, returns 409 with the exact block reasons. On
+    success returns the routing record including the Resend message id.
+
+    No silent fallback to dry_run -- the response status code is the
+    truth signal:
+      200  status=routed (Resend accepted, message_id present)
+      409  status=delivery_blocked (allowlist or key/env missing)
+      502  status=delivery_failed (Resend rejected the send)
+    """
+    expected = (os.environ.get("ADMIN_TOKEN") or "").strip()
+    provided = (request.args.get("token") or "").strip()
+    if not expected:
+        return Response("ADMIN_TOKEN not configured", status=503,
+                        mimetype="text/plain")
+    if not provided or provided != expected:
+        return Response("forbidden", status=401, mimetype="text/plain")
+
+    mover_id = (request.form.get("mover_id")
+                or request.args.get("mover_id")
+                or "M001").strip()
+    result = routing.smoke_send(mover_id=mover_id)
+    if result.get("routing") is None:
+        return jsonify({"ok": False, "error": result.get("error"),
+                        "result": result}), 400
+    status = result["routing"]["status"]
+    code = {"routed": 200, "delivery_blocked": 409,
+            "delivery_failed": 502, "no_match": 422}.get(status, 500)
+    return jsonify({
+        "ok": result["ok"],
+        "status": status,
+        "delivery_mode": result["routing"].get("delivery_mode"),
+        "block_reasons": result["routing"].get("block_reasons"),
+        "error": result.get("error"),
+        "message_id": (result["routing"].get("email_result") or {}).get("id"),
+        "subject": result["routing"].get("subject"),
+        "mover": result["routing"].get("mover"),
+        "lead_id": result["lead"]["lead_id"],
+        "routed_at": result["routing"]["routed_at"],
+    }), code
+
+
+@app.route("/api/talkbot/inbound", methods=["POST"])
+def api_talkbot_inbound():
+    """TalkBot -> MARKO inbound handoff.
+
+    Accepts a JSON body with the same flat shape POST /quote uses, plus an
+    optional talkbot_session_id for trace join. Routes through the same
+    routing.submit_quote() loop the live-delivery smoke proved -- which
+    means every existing safety still applies:
+
+      * MARKO_QUOTE_LIVE_SEND must equal "1" for any real send
+      * MARKO_MOVER_ALLOWLIST gates which mover may receive live email
+      * MARKO_SMOKE_REDIRECT_TO redirects live email to the smoke inbox
+
+    Auth: requires header X-Talkbot-Token matching env TALKBOT_INBOUND_TOKEN.
+    If the env is unset the route returns 503 -- never accepts unsigned
+    payloads. No silent fallthrough.
+
+    Response is JSON; status code reflects the routing outcome:
+      200  ok=True,  status=routed | delivery_blocked | dry_run
+      400  ok=False, validation errors
+      401  bad/missing token
+      503  TALKBOT_INBOUND_TOKEN not configured
+    """
+    expected = (os.environ.get("TALKBOT_INBOUND_TOKEN") or "").strip()
+    if not expected:
+        return jsonify({"ok": False,
+                        "error": "TALKBOT_INBOUND_TOKEN not configured"}), 503
+    provided = (request.headers.get("X-Talkbot-Token") or "").strip()
+    if not provided or provided != expected:
+        return jsonify({"ok": False, "error": "forbidden"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"ok": False,
+                        "error": "JSON body must be an object"}), 400
+
+    form = {k: payload.get(k) for k in (
+        "customer_name", "phone", "email", "move_date",
+        "pickup_zip", "dropoff_zip", "home_size",
+        "stairs_elevator", "heavy_items", "urgency", "notes",
+    )}
+    talkbot_session_id = (payload.get("talkbot_session_id")
+                          or payload.get("session_id") or "")
+
+    live = (os.environ.get("MARKO_QUOTE_LIVE_SEND") or "").strip() == "1"
+    result = routing.submit_quote(
+        form, dry_run=not live,
+        source="inbound_talkbot",
+        talkbot_session_id=talkbot_session_id or None,
+    )
+
+    if not result["ok"]:
+        return jsonify({"ok": False, "errors": result["errors"]}), 400
+
+    routing_record = result["routing"] or {}
+    owner = result.get("owner_notify") or {}
+    return jsonify({
+        "ok": True,
+        "lead_id": result["lead"]["lead_id"],
+        "source": result["lead"]["source"],
+        "talkbot_session_id": result["lead"].get("talkbot_session_id"),
+        "lead_quality": result["lead"].get("lead_quality"),
+        "estimated_value": [
+            result["lead"].get("estimated_value_low_usd"),
+            result["lead"].get("estimated_value_high_usd"),
+        ],
+        "status": routing_record.get("status"),
+        "delivery_mode": routing_record.get("delivery_mode"),
+        "mover": routing_record.get("mover"),
+        "block_reasons": routing_record.get("block_reasons"),
+        "message_id": (routing_record.get("email_result") or {}).get("id"),
+        "owner_notify": {
+            "sent": owner.get("sent"),
+            "status": owner.get("status"),
+            "message_id": owner.get("message_id"),
+            "missed_money": owner.get("missed_money"),
+        },
+    }), 200
 
 
 if __name__ == "__main__":

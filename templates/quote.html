@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Get your moving quote</title>
+  <style>
+    :root {
+      --bg: #0a0c0e;
+      --panel: #141a21;
+      --border: #232c36;
+      --text: #e8eef5;
+      --muted: #8a98a8;
+      --accent: #00d68f;
+      --accent-strong: #00ffa6;
+      --danger: #ff5c5c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+    }
+    .wrap { max-width: 480px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 8px 0 4px; }
+    .sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+    form { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+    label.req::after { content: " *"; color: var(--danger); }
+    input, select, textarea {
+      width: 100%;
+      background: #0e1318;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      color: var(--text);
+      font-size: 16px;
+      font-family: inherit;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 380px) { .row { grid-template-columns: 1fr; } }
+    button {
+      margin-top: 18px;
+      width: 100%;
+      background: var(--accent);
+      color: #06120c;
+      border: 0;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-strong); }
+    .errors {
+      background: #2a1418;
+      border: 1px solid var(--danger);
+      color: #ffd1d1;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    .ok {
+      background: #102a1d;
+      border: 1px solid var(--accent);
+      color: #c8ffe2;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    .ok strong { color: var(--accent-strong); }
+    .foot { color: var(--muted); font-size: 12px; margin-top: 14px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Get your moving quote</h1>
+    <div class="sub">Local Virginia movers. One form. Reply within the hour during business hours.</div>
+
+    {% if submitted_ok %}
+      <div class="ok">
+        <strong>Got it.</strong> A local mover will contact you shortly using the phone or email you provided.
+        <div style="margin-top:8px; color:var(--muted); font-size:13px;">Reference: {{ lead_id }}</div>
+      </div>
+      <div class="foot"><a href="/quote" style="color:var(--accent);">Submit another request</a></div>
+    {% else %}
+      {% if errors %}
+        <div class="errors">
+          <strong>Please fix the following:</strong>
+          <ul style="margin:6px 0 0 18px; padding:0;">
+            {% for e in errors %}<li>{{ e }}</li>{% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      <form method="POST" action="/quote" autocomplete="on">
+        <label class="req" for="customer_name">Your name</label>
+        <input id="customer_name" name="customer_name" type="text" required value="{{ form.customer_name or '' }}">
+
+        <div class="row">
+          <div>
+            <label class="req" for="phone">Phone</label>
+            <input id="phone" name="phone" type="tel" inputmode="tel" required value="{{ form.phone or '' }}">
+          </div>
+          <div>
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" inputmode="email" value="{{ form.email or '' }}">
+          </div>
+        </div>
+
+        <label class="req" for="move_date">Move date</label>
+        <input id="move_date" name="move_date" type="date" required value="{{ form.move_date or '' }}">
+
+        <div class="row">
+          <div>
+            <label class="req" for="pickup_zip">Pickup ZIP</label>
+            <input id="pickup_zip" name="pickup_zip" type="text" inputmode="numeric" pattern="\d{5}" maxlength="5" required value="{{ form.pickup_zip or '' }}">
+          </div>
+          <div>
+            <label for="dropoff_zip">Drop-off ZIP</label>
+            <input id="dropoff_zip" name="dropoff_zip" type="text" inputmode="numeric" pattern="\d{5}" maxlength="5" value="{{ form.dropoff_zip or '' }}">
+          </div>
+        </div>
+
+        <label for="home_size">Home size</label>
+        <select id="home_size" name="home_size">
+          <option value="">Select...</option>
+          {% for opt in ["Studio","1 bedroom","2 bedroom","3 bedroom","4+ bedroom","Office / commercial","Other"] %}
+            <option value="{{ opt }}" {% if form.home_size == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="stairs_elevator">Stairs or elevator?</label>
+        <select id="stairs_elevator" name="stairs_elevator">
+          <option value="">Select...</option>
+          {% for opt in ["Ground floor","Stairs","Elevator","Both stairs and elevator"] %}
+            <option value="{{ opt }}" {% if form.stairs_elevator == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="heavy_items">Heavy or specialty items</label>
+        <input id="heavy_items" name="heavy_items" type="text" placeholder="piano, gun safe, treadmill..." value="{{ form.heavy_items or '' }}">
+
+        <label for="urgency">Urgency</label>
+        <select id="urgency" name="urgency">
+          {% for val, lbl in [("asap","ASAP — within 48 hours"),("this_week","This week"),("this_month","This month"),("flexible","Flexible / planning ahead")] %}
+            <option value="{{ val }}" {% if form.urgency == val %}selected{% endif %}>{{ lbl }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="notes">Anything else?</label>
+        <textarea id="notes" name="notes" placeholder="Specific timing, parking, fragile items...">{{ form.notes or '' }}</textarea>
+
+        <button type="submit">Get my quote</button>
+      </form>
+      <div class="foot">By submitting you agree we may share your info with local Virginia movers.</div>
+    {% endif %}
+  </div>
+</body>
+</html>
