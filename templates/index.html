@@ -88,7 +88,38 @@
             transition: background 120ms, color 120ms;
         }
         nav a:hover { color: var(--text); background: rgba(255,255,255,0.04); }
-        main { padding: 18px; padding-bottom: 90px; max-width: 1200px; margin: 0 auto; }
+        .brand-lockup { display: flex; flex-direction: column; gap: 2px; min-width: 240px; }
+        .brand-kicker {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            color: var(--muted);
+            font-weight: 700;
+        }
+        .brand-title {
+            font-size: 19px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            color: var(--text);
+            line-height: 1.1;
+        }
+        .brand-subtitle { font-size: 12px; color: var(--muted); }
+        .header-right { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+        .header-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-size: 11px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        .header-chip strong { font-size: 12px; }
+        main { padding: 18px; padding-bottom: 90px; max-width: 1320px; margin: 0 auto; }
         .section {
             background: linear-gradient(180deg, var(--panel) 0%, var(--bg-elev) 100%);
             border: 1px solid var(--border);
@@ -185,7 +216,216 @@
             margin-bottom: 16px;
             font-size: 13px;
         }
-        .scroll-x { overflow-x: auto; }
+        .hero {
+            display: grid;
+            grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.9fr);
+            gap: 14px;
+            align-items: stretch;
+        }
+        .hero-copy {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 14px;
+        }
+        .hero-kicker {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            color: var(--accent);
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .hero-copy h2 {
+            margin: 0;
+            font-size: clamp(28px, 3.4vw, 42px);
+            line-height: 1.03;
+            letter-spacing: -0.04em;
+            color: var(--text);
+            text-transform: none;
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .hero-lede {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 14px;
+            max-width: 64ch;
+        }
+        .hero-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .hero-stat {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 11px 12px;
+        }
+        .hero-stat .value {
+            display: block;
+            font-size: 23px;
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            color: var(--text);
+        }
+        .hero-stat .label {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+        }
+        .hero-stat .meta {
+            display: block;
+            margin-top: 2px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+        .bridge-card {
+            background: linear-gradient(180deg, rgba(18,24,31,0.96) 0%, rgba(12,16,21,0.96) 100%);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-elev);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .bridge-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+        .bridge-label {
+            color: var(--muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.14em;
+            font-weight: 700;
+        }
+        .bridge-title {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-top: 2px;
+        }
+        .bridge-note { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+        .bridge-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: rgba(0,214,143,0.08);
+            border: 1px solid rgba(0,214,143,0.22);
+            color: #4ade80;
+            font-size: 11px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+        .bridge-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .bridge-metric {
+            background: var(--panel2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 11px;
+        }
+        .bridge-metric span {
+            display: block;
+            color: var(--muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
+        }
+        .bridge-metric strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 17px;
+            letter-spacing: -0.02em;
+        }
+        .bridge-metric em {
+            display: block;
+            margin-top: 2px;
+            color: var(--muted);
+            font-style: normal;
+            font-size: 11px;
+        }
+        .bridge-highlight {
+            border-left: 3px solid var(--accent);
+            padding-left: 10px;
+            color: var(--text);
+        }
+        .overview-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 14px;
+        }
+        .overview-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+        }
+        .overview-card .value {
+            display: block;
+            font-size: 22px;
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+        }
+        .overview-card .label {
+            display: block;
+            margin-top: 4px;
+            color: var(--muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+        }
+        .overview-card .meta {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 11px;
+        }
+        .scroll-x {
+            overflow-x: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--panel2);
+            box-shadow: var(--shadow-card);
+        }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+        th {
+            background: linear-gradient(180deg, #202833 0%, #1a212b 100%);
+            color: var(--muted);
+            font-size: 10.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.09em;
+            font-weight: 700;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        tr:last-child td { border-bottom: 0; }
+        tr:nth-child(even) td { background: rgba(255,255,255,0.015); }
+        tr:hover td { background: rgba(0,214,143,0.045); }
+        table td:first-child, table th:first-child { padding-left: 12px; }
+        table td:last-child, table th:last-child { padding-right: 12px; }
         details summary { cursor: pointer; color: var(--muted); padding: 6px 0; transition: color 100ms; }
         details summary:hover { color: var(--text); }
         details[open] summary { color: var(--text); }
@@ -248,8 +488,8 @@
         .tier-chip { font-size: 11px; padding: 3px 8px; }
         .tier-chip .t-num { background: var(--accent); color: #001b10; padding: 1px 5px; border-radius: 8px; margin-right: 4px; font-weight: 600; }
         .welcome {
-            background: linear-gradient(135deg, #0e7c5a 0%, #047857 60%, #0a6b48 100%);
-            color: #f0fff8;
+            background: linear-gradient(180deg, rgba(18,24,31,0.96) 0%, rgba(12,16,21,0.96) 100%);
+            color: var(--text);
             padding: 16px 20px;
             border-radius: var(--radius);
             margin-bottom: 18px;
@@ -258,14 +498,14 @@
             gap: 14px;
             align-items: center;
             justify-content: space-between;
-            box-shadow: 0 8px 28px -12px rgba(14,124,90,0.6), 0 1px 0 rgba(255,255,255,0.08) inset;
-            border: 1px solid rgba(0,214,143,0.25);
+            box-shadow: var(--shadow-card);
+            border: 1px solid var(--border);
         }
-        .welcome .resume-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; opacity: 0.85; }
-        .welcome .resume-line { font-size: 14px; opacity: 0.98; margin-top: 4px; }
-        .welcome .btn { background: rgba(255,255,255,0.95); color: #003420; }
-        .welcome .btn:hover { background: #fff; }
-        .welcome .btn.muted { background: rgba(0,0,0,0.25); color: #f0fff8; border: 1px solid rgba(255,255,255,0.2); }
+        .welcome .resume-title { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); }
+        .welcome .resume-line { font-size: 14px; color: var(--text); margin-top: 4px; }
+        .welcome .btn { background: var(--accent); color: #00120b; }
+        .welcome .btn:hover { background: var(--accent-strong); }
+        .welcome .btn.muted { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
 
         .seq-pill {
             display: inline-flex;
@@ -390,17 +630,23 @@
         .mobile-bar a:active { transform: scale(0.97); }
         .mobile-bar .mb-ico { font-size: 16px; line-height: 1; }
         @media (max-width: 768px) {
+            header { align-items: flex-start; }
+            .header-right { width: 100%; justify-content: flex-start; }
             nav { gap: 0; }
             nav a { padding: 5px 8px; font-size: 11.5px; }
         }
         @media (max-width: 640px) {
             main { padding: 12px; padding-bottom: 92px; }
             header { padding: 10px 14px; }
-            header h1 { font-size: 14px; letter-spacing: 0.14em; }
+            .brand-lockup { min-width: 0; }
+            .brand-title { font-size: 15px; letter-spacing: 0.06em; }
+            .brand-subtitle { font-size: 11px; }
             .section { padding: 12px; border-radius: 8px; }
-            th, td { padding: 6px 8px; font-size: 12px; }
+            th, td { padding: 7px 8px; font-size: 12px; }
             input, select, button { font-size: 12px; }
             .mobile-bar { display: block; }
+            .hero { grid-template-columns: 1fr; }
+            .hero-stats, .bridge-grid { grid-template-columns: 1fr; }
             /* Lead table feels less hostile on phones */
             #leads .scroll-x { border: 1px solid var(--border); border-radius: 6px; }
             /* Tap targets */
@@ -415,11 +661,20 @@
 </head>
 <body>
     <header>
-        <h1>MARKO</h1>
+        <div class="brand-lockup">
+            <div class="brand-kicker">MARKO</div>
+            <div class="brand-title">Lead Intelligence</div>
+            <div class="brand-subtitle">Find local move opportunities before your competitors do.</div>
+        </div>
+        <div class="header-right">
+            <span class="header-chip"><strong>{{ stats.leads_total }}</strong> leads</span>
+            <span class="header-chip"><strong>{{ money_mode.call_now|length }}</strong> call today</span>
+            <span class="header-chip"><strong>{{ stats.export_count }}</strong> exports</span>
+        </div>
         <nav>
             <a href="#money">Money Mode</a>
             <a href="/mode/call">Call Mode</a>
-            <a href="/recap">📊 Recap</a>
+            <a href="/recap">Recap</a>
             <a href="#callfirst">Call First</a>
             <a href="#scrape">Find Leads</a>
             <a href="#campaigns">Campaigns</a>
@@ -437,6 +692,89 @@
         </div>
         {% endif %}
         {% if message %}<div class="msg">{{ message }}</div>{% endif %}
+
+        {% set export_events = log|selectattr('action', 'equalto', 'export')|list %}
+
+        <section class="section hero" id="overview">
+            <div class="hero-copy">
+                <div>
+                    <div class="hero-kicker">MARKO Lead Intelligence</div>
+                    <h2>Find local move opportunities before competitors do.</h2>
+                    <p class="hero-lede">
+                        Jay's command center for call-first leads, follow-up queues, and the current export bridge.
+                        Scan the strongest opportunities first, then work down the queue.
+                    </p>
+                    <div class="hero-actions">
+                        <a class="btn" href="#callfirst">Review call-first</a>
+                        <a class="btn muted" href="#leads">Open leads</a>
+                        <a class="btn muted" href="#campaigns">Check campaigns</a>
+                    </div>
+                </div>
+
+                <div class="overview-strip">
+                    <div class="overview-card">
+                        <span class="value">{{ stats.leads_total }}</span>
+                        <span class="label">Total leads</span>
+                        <span class="meta">where opportunities live</span>
+                    </div>
+                    <div class="overview-card">
+                        <span class="value">{{ money_mode.call_now|length }}</span>
+                        <span class="label">Call today</span>
+                        <span class="meta">highest intent first</span>
+                    </div>
+                    <div class="overview-card">
+                        <span class="value">{{ money_mode.followup|length }}</span>
+                        <span class="label">Follow up</span>
+                        <span class="meta">waiting on a second touch</span>
+                    </div>
+                    <div class="overview-card">
+                        <span class="value">{{ stats.export_count }}</span>
+                        <span class="label">Exports</span>
+                        <span class="meta">{% if export_events %}last {{ export_events[-1].timestamp[:16] }}{% else %}no export logged yet{% endif %}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bridge-card">
+                <div class="bridge-head">
+                    <div>
+                        <div class="bridge-label">Bridge status</div>
+                        <div class="bridge-title">BookerMove export surface</div>
+                    </div>
+                    <span class="bridge-status">Contract locked</span>
+                </div>
+                <p class="bridge-note">Snapshot-backed handoff for customer-facing lead review. No live coupling, no hidden state.</p>
+                <div class="bridge-grid">
+                    <div class="bridge-metric">
+                        <span>Lead count</span>
+                        <strong>{{ stats.leads_total }}</strong>
+                        <em>current source-of-truth rows</em>
+                    </div>
+                    <div class="bridge-metric">
+                        <span>Export count</span>
+                        <strong>{{ stats.export_count }}</strong>
+                        <em>logged export actions</em>
+                    </div>
+                    <div class="bridge-metric">
+                        <span>Last export</span>
+                        <strong>{% if export_events %}{{ export_events[-1].timestamp[:16] }}{% else %}none yet{% endif %}</strong>
+                        <em>latest recorded snapshot</em>
+                    </div>
+                    <div class="bridge-metric">
+                        <span>Contract</span>
+                        <strong>Stable</strong>
+                        <em>one-way JSON handoff</em>
+                    </div>
+                </div>
+                {% if top_hot %}
+                <div class="bridge-metric bridge-highlight">
+                    <span>Strongest opportunity</span>
+                    <strong>{{ top_hot.name|truncate(36) }}</strong>
+                    <em>{{ top_hot._label }} {{ top_hot._score }}{% if top_hot.city %} · {{ top_hot.city }}{% endif %}{% if top_hot.phone %} · {{ top_hot.phone }}{% endif %}</em>
+                </div>
+                {% endif %}
+            </div>
+        </section>
 
         <section class="section money-section" id="money">
             <h2>MAKE MONEY TODAY
@@ -1322,10 +1660,10 @@
 
     <nav class="mobile-bar" aria-label="Quick actions">
         <div class="mobile-bar-inner">
-            <a href="#callfirst" class="primary"><span class="mb-ico">📞</span>Call First</a>
-            <a href="#money"><span class="mb-ico">💰</span>Money</a>
-            <a href="#scrape"><span class="mb-ico">🔎</span>Find</a>
-            <a href="#leads"><span class="mb-ico">📋</span>Leads</a>
+            <a href="#callfirst" class="primary">Call First</a>
+            <a href="#money">Money</a>
+            <a href="#scrape">Find</a>
+            <a href="#leads">Leads</a>
         </div>
     </nav>
 

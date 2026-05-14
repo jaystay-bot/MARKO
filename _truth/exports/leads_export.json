@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0.0",
+  "exported_at": "2026-05-14T00:41:24Z",
+  "source": "marko",
+  "run_id": "marko-6a1c7d4ab686",
+  "lead_count": 3,
+  "leads": [
+    {
+      "lead_id": "va-001",
+      "lead_type": "move_opportunity",
+      "move_signal_type": "moved_in",
+      "address_area": "Short Pump area",
+      "city": "Richmond",
+      "state": "VA",
+      "zip": "23233",
+      "service_radius_match": "within 10 miles of Richmond metro",
+      "source": "marko-public-signal",
+      "source_url": null,
+      "signal_date": "2026-05-10T00:00:00Z",
+      "confidence": "high",
+      "priority": "call_today",
+      "recommended_action": "Reach out today with welcome-to-the-area moving offer",
+      "outreach_angle": "New residents often need help with secondary moves and storage",
+      "compliance_note": "Use only public locality info; verify before outreach"
+    },
+    {
+      "lead_id": "va-002",
+      "lead_type": "move_opportunity",
+      "move_signal_type": "moved_out",
+      "address_area": "Old Town district",
+      "city": "Alexandria",
+      "state": "VA",
+      "zip": "22314",
+      "service_radius_match": "within 5 miles of Alexandria service area",
+      "source": "marko-public-signal",
+      "source_url": null,
+      "signal_date": "2026-05-08T00:00:00Z",
+      "confidence": "medium",
+      "priority": "follow_up",
+      "recommended_action": "Follow up within 7 days on transition support",
+      "outreach_angle": "Recently vacated homes often need cleanout or staging haul-away",
+      "compliance_note": "Public locality only; no resident PII"
+    },
+    {
+      "lead_id": "va-003",
+      "lead_type": "move_opportunity",
+      "move_signal_type": "nearby_homeowner",
+      "address_area": "Ghent neighborhood",
+      "city": "Norfolk",
+      "state": "VA",
+      "zip": "23507",
+      "service_radius_match": "within target Hampton Roads metro",
+      "source": "marko-public-signal",
+      "source_url": null,
+      "signal_date": "2026-05-05T00:00:00Z",
+      "confidence": "low",
+      "priority": "low_priority",
+      "recommended_action": "Add to nurture list; revisit next quarter",
+      "outreach_angle": "Established homeowners may need long-haul or storage when life changes",
+      "compliance_note": "Aggregate-area signal only; do not infer individual move intent"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "exported_at": "2026-05-13T12:00:00Z",
+  "source": "other",
+  "run_id": "fixture-badsource-0001",
+  "lead_count": 1,
+  "leads": [
+    {
+      "lead_id": "fx-badsource-001",
+      "lead_type": "move_opportunity",
+      "move_signal_type": "moved_in",
+      "address_area": "Short Pump area",
+      "city": "Richmond",
+      "state": "VA",
+      "zip": "23233",
+      "service_radius_match": "within 10 miles of Richmond metro",
+      "source": "marko-public-signal",
+      "source_url": null,
+      "signal_date": "2026-05-10T00:00:00Z",
+      "confidence": "high",
+      "priority": "call_today",
+      "recommended_action": "Reach out today with welcome-to-the-area moving offer",
+      "outreach_angle": "New residents often need help with secondary moves and storage",
+      "compliance_note": "Use only public locality info; verify before outreach"
+    }
+  ]
+}
