@@ -1,6 +1,141 @@
 {% extends "_marko_shell.html" %}
 {% block title %}Pipeline · MARKO{% endblock %}
-{% block subtitle %}Lead status, follow-ups, dispositions.{% endblock %}
+{% block subtitle %}Tap a lead to expand. Mark contacted with one tap.{% endblock %}
+
+{% block head_extra %}
+  <style>
+    /* ---- Pipeline V2 row styling (additive to _marko_shell base) --- */
+    .lead {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .lead > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 56px;
+    }
+    .lead > summary::-webkit-details-marker { display: none; }
+    .lead > summary:hover { background: rgba(255,255,255,0.015); }
+    .lead .biz {
+      font-weight: 600; line-height: 1.3;
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    }
+    .lead .meta {
+      color: var(--muted); font-size: 12px; margin-top: 3px;
+      display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    }
+    .lead .meta .sep { color: var(--muted-dim); }
+    .lead .quick {
+      display: flex; gap: 6px; align-items: center;
+    }
+    /* Chevron */
+    .lead .chev {
+      width: 24px; height: 24px;
+      display: inline-flex; align-items: center; justify-content: center;
+      color: var(--muted); font-size: 14px;
+      transition: transform 0.12s ease;
+    }
+    .lead[open] > summary .chev { transform: rotate(180deg); color: var(--text-dim); }
+
+    /* Inline buttons in summary -- keep them tap-target sized but compact */
+    .lead .quick form { display: inline; margin: 0; }
+    .lead .quick .btn-icon {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 44px; height: 40px;
+      border-radius: 8px; border: 1px solid var(--border);
+      background: var(--panel-2); color: var(--text);
+      font-size: 18px; cursor: pointer;
+      text-decoration: none;
+    }
+    .lead .quick .btn-icon.tel { color: var(--good); border-color: #1f6c52; background: #0e2b1d; }
+    .lead .quick .btn-icon.contact { color: var(--accent); border-color: #1f6c52; background: #0a3a26; }
+    .lead .quick .btn-icon:hover { border-color: var(--border-2); }
+    /* Disable visually when not actionable */
+    .lead .quick .btn-icon.disabled { opacity: 0.35; pointer-events: none; }
+
+    /* Expanded body */
+    .lead .body {
+      padding: 4px 14px 14px;
+      border-top: 1px solid var(--border);
+    }
+    .lead .body h4 {
+      margin: 14px 0 6px; font-size: 11px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em;
+    }
+    .lead .body h4:first-child { margin-top: 10px; }
+    .lead .body .kv {
+      display: grid; grid-template-columns: 88px 1fr; gap: 8px;
+      font-size: 13px; line-height: 1.45;
+    }
+    .lead .body .kv .k { color: var(--muted); }
+    .lead .body .pains {
+      list-style: none; padding: 0; margin: 6px 0 0;
+    }
+    .lead .body .pains li {
+      padding: 6px 10px;
+      background: #1c1112; border-left: 3px solid var(--hot);
+      border-radius: 6px; font-size: 13px; margin-bottom: 4px;
+    }
+    .lead .body .script {
+      background: var(--bg-elev); border-radius: 8px;
+      padding: 10px 12px; font-size: 13px; line-height: 1.55;
+      white-space: pre-wrap; max-height: 220px; overflow-y: auto;
+      color: var(--text-dim);
+    }
+    .lead .body .angle {
+      background: var(--bg-elev); border-radius: 8px;
+      padding: 10px 12px; font-size: 13px; line-height: 1.5;
+      color: var(--text-dim);
+    }
+    .lead .body .angle b { color: var(--text); }
+
+    /* Disposition palette -- 5 buttons in a wrap row */
+    .lead .dispo {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;
+    }
+    .lead .dispo form { display: inline; margin: 0; }
+    .lead .dispo button {
+      padding: 9px 12px; min-height: 40px;
+      border-radius: 8px; border: 1px solid var(--border);
+      background: var(--panel-2); color: var(--text);
+      font: 500 13px system-ui; cursor: pointer;
+    }
+    .lead .dispo button:hover { border-color: var(--border-2); }
+    .lead .dispo button.win { background: #00d68f; color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+    .lead .dispo button.warm { background: #2a2210; color: var(--money); border-color: #5a4316; }
+    .lead .dispo button.cold { background: #1c1212; color: var(--hot); border-color: #5a1f1f; }
+    .lead .dispo button.note { background: var(--panel-2); color: var(--text-dim); }
+
+    .lead .secondary {
+      display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+    }
+    .lead .secondary .btn { padding: 8px 12px; min-height: 36px; font-size: 13px; }
+
+    /* Status visually-muted on DEAD/ARCHIVED rows */
+    .lead.dead > summary { opacity: 0.55; }
+
+    /* ---- Filter chips strip (tiny, optional) ---- */
+    .filters {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin: 12px 0 16px;
+    }
+    .filters a {
+      display: inline-block; padding: 6px 12px; border-radius: 999px;
+      background: var(--panel-2); color: var(--muted); font-size: 12px;
+      border: 1px solid var(--border); text-decoration: none;
+    }
+    .filters a:hover { color: var(--text); border-color: var(--border-2); }
+    .filters a.active { background: #0e2b1d; color: var(--good); border-color: #1f6c52; }
+  </style>
+{% endblock %}
 
 {% block content %}
   <div class="card row" data-test="pipeline-summary">
@@ -18,29 +153,128 @@
     </div>
   </div>
 
-  <h2 class="h2">All leads</h2>
+  {# Filter chips: just status today; can extend later #}
+  {% set filt = request.args.get('filter', '') %}
+  <div class="filters">
+    <a href="/pipeline" class="{% if not filt %}active{% endif %}">All</a>
+    <a href="/pipeline?filter=NEW"        class="{% if filt == 'NEW' %}active{% endif %}">NEW</a>
+    <a href="/pipeline?filter=CONTACTED"  class="{% if filt == 'CONTACTED' %}active{% endif %}">CONTACTED</a>
+    <a href="/pipeline?filter=INTERESTED" class="{% if filt == 'INTERESTED' %}active{% endif %}">INTERESTED</a>
+    <a href="/pipeline?filter=BOOKED"     class="{% if filt == 'BOOKED' %}active{% endif %}">BOOKED</a>
+  </div>
+
   {% if leads %}
     {% for l in leads %}
-      <div class="lead-row" data-test="pipeline-row">
-        <div>
-          <div class="biz">
-            <span class="pill {{ l._label or l.status or 'WEAK' }}">{{ l._label or l.status or '—' }}</span>
-            {{ l.name or '(no name)' }}
+      {% set status = l.status or 'NEW' %}
+      {% if not filt or filt == status %}
+        {% set is_dead = status in ('DEAD', 'ARCHIVED') %}
+        <details class="lead {% if is_dead %}dead{% endif %}" data-test="pipeline-row">
+          <summary>
+            <div>
+              <div class="biz">
+                <span class="pill {{ l._label or 'WEAK' }}">{{ l._label or 'WEAK' }}</span>
+                {{ l.name or '(no name)' }}
+              </div>
+              <div class="meta">
+                <span class="pill {{ status }}">{{ status }}</span>
+                {% if l.niche %}<span class="sep">·</span> {{ l.niche }}{% endif %}
+                {% if l.city %}<span class="sep">·</span> {{ l.city }}{% endif %}
+              </div>
+            </div>
+            <div class="quick">
+              {% if l.phone and not is_dead %}
+                <a class="btn-icon tel"
+                   href="tel:{{ l.phone }}"
+                   onclick="event.stopPropagation();"
+                   title="Call {{ l.phone }}">📞</a>
+              {% else %}
+                <span class="btn-icon disabled" title="No phone on file">📞</span>
+              {% endif %}
+              {% if not is_dead and status != 'CONTACTED' %}
+                <form method="POST"
+                      action="/lead/{{ l.id }}/contact"
+                      onsubmit="event.stopPropagation();"
+                      onclick="event.stopPropagation();"
+                      data-test="mark-contacted">
+                  <button type="submit"
+                          class="btn-icon contact"
+                          title="Mark contacted">✓</button>
+                </form>
+              {% else %}
+                <span class="btn-icon disabled" title="{% if status == 'CONTACTED' %}Already contacted{% else %}{{ status }}{% endif %}">✓</span>
+              {% endif %}
+              <span class="chev">▾</span>
+            </div>
+          </summary>
+
+          <div class="body" data-test="pipeline-detail">
+            <div class="kv">
+              {% if l.phone %}<div class="k">phone</div><div><a href="tel:{{ l.phone }}">{{ l.phone }}</a></div>{% endif %}
+              {% if l.email %}<div class="k">email</div><div><a href="mailto:{{ l.email }}">{{ l.email }}</a></div>{% endif %}
+              {% if l.website %}<div class="k">site</div><div><a href="{{ l.website }}" target="_blank" rel="noopener">{{ l.website }} ↗</a></div>{% endif %}
+              {% if l._sequence_state and l._sequence_state.label %}
+                <div class="k">sequence</div><div>{{ l._sequence_state.label }}</div>
+              {% endif %}
+              {% if l._offer and (l._offer.price_min or l._offer.price) %}
+                <div class="k">est. value</div><div style="color: var(--money);">
+                  {% if l._offer.price_min and l._offer.price_max %}${{ l._offer.price_min }}–${{ l._offer.price_max }}{% else %}${{ l._offer.price }}{% endif %}
+                </div>
+              {% endif %}
+            </div>
+
+            {% if l.pain_points %}
+              <h4>Leaks observed</h4>
+              <ul class="pains">
+                {% for p in l.pain_points[:4] %}<li>{{ p }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+
+            {% if l._brain and l._brain.best_angle %}
+              <h4>Best angle</h4>
+              <div class="angle"><b>{{ l._brain.best_angle }}</b></div>
+            {% endif %}
+
+            {% if l._script %}
+              <h4>Cold-call script</h4>
+              <pre class="script">{{ l._script }}</pre>
+            {% endif %}
+
+            {% if not is_dead %}
+              <h4>Disposition (after the call)</h4>
+              <div class="dispo" data-test="dispo-palette">
+                <form method="POST" action="/lead/{{ l.id }}/disposition/BOOKED">
+                  <button class="win" type="submit">Booked</button>
+                </form>
+                <form method="POST" action="/lead/{{ l.id }}/disposition/INTERESTED">
+                  <button class="warm" type="submit">Interested</button>
+                </form>
+                <form method="POST" action="/lead/{{ l.id }}/disposition/CALLBACK">
+                  <button class="warm" type="submit">Callback</button>
+                </form>
+                <form method="POST" action="/lead/{{ l.id }}/disposition/VOICEMAIL">
+                  <button class="note" type="submit">Voicemail</button>
+                </form>
+                <form method="POST" action="/lead/{{ l.id }}/disposition/NOT_INTERESTED">
+                  <button class="cold" type="submit">Not interested</button>
+                </form>
+              </div>
+
+              <div class="secondary">
+                {% if l.email %}
+                  <a class="btn btn-ghost" href="mailto:{{ l.email }}">Open email</a>
+                {% endif %}
+                <a class="btn btn-ghost" href="/lead/{{ l.id }}/timeline">View timeline →</a>
+                <a class="btn btn-ghost" href="/legacy#lead-{{ l.id }}">Full controls →</a>
+              </div>
+            {% else %}
+              <div class="secondary">
+                <span class="muted" style="color: var(--muted);">Lead is {{ status }}. Open in legacy view to revive.</span>
+                <a class="btn btn-ghost" href="/legacy#lead-{{ l.id }}">Full controls →</a>
+              </div>
+            {% endif %}
           </div>
-          <div class="meta">
-            {{ l.niche or '—' }}{% if l.city %} · {{ l.city }}{% endif %}
-            {% if l.status %} · <span class="pill {{ l.status }}">{{ l.status }}</span>{% endif %}
-          </div>
-        </div>
-        <div class="right" style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
-          {% if l.phone %}
-            <a class="btn btn-tel btn-sm" href="tel:{{ l.phone }}">Call</a>
-          {% endif %}
-          {% if l.email %}
-            <a class="btn btn-sm btn-ghost" href="mailto:{{ l.email }}" style="font-size:11px;">Email</a>
-          {% endif %}
-        </div>
-      </div>
+        </details>
+      {% endif %}
     {% endfor %}
   {% else %}
     <div class="empty">No leads yet. Run a scrape from Campaigns.</div>

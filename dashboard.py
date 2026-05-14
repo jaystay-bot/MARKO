@@ -224,19 +224,57 @@ def index():
 
 @app.route("/pipeline")
 def pipeline_view():
-    """Mobile-first leads list."""
+    """Mobile-first leads list with per-row dispositions + expand panel.
+
+    V2 (N-MARKO-VISUAL-REBUILD-V2): enriches the top-N leads with the
+    same helper data the today() route already pulls (`_offer`,
+    `_brain`, `_script`, `_sequence_state`) so the expanded `<details>`
+    panel can show real script + best angle + sequence state without
+    any new backend calls.
+    """
     leads = load_json(LEADS_FILE).get("leads", [])
     commands.annotate_leads(leads)
 
-    # Sort: HOT/MONEY first, then status priority, then recency
+    # Sort: HOT/MONEY first, then status priority, then alpha
     label_rank = {"MONEY": 0, "HOT": 1, "GOOD": 2, "WARM": 3, "WEAK": 4}
     status_rank = {"INTERESTED": 0, "BOOKED": 1, "CONTACTED": 2,
-                   "NEW": 3, "RETRY": 4, "DEAD": 5}
+                   "NEW": 3, "RETRY": 4, "DEAD": 5, "ARCHIVED": 6}
     leads.sort(
         key=lambda l: (label_rank.get(l.get("_label"), 9),
                        status_rank.get(l.get("status"), 9),
                        (l.get("name") or "").lower()),
     )
+
+    # Enrich top-N actionable leads. Skip DEAD/ARCHIVED to keep the
+    # work cheap; those rows render the collapsed-only path.
+    try:
+        sender_name = commands.get_config().get("sender_name", "Jay")
+    except Exception:
+        sender_name = "Jay"
+    enrich_n = 50
+    actionable = [l for l in leads
+                  if l.get("status") not in ("DEAD", "ARCHIVED")][:enrich_n]
+    for _l in actionable:
+        if "_offer" not in _l:
+            try:
+                _l["_offer"] = marko_intel.recommend_offer(_l)
+            except Exception:
+                _l["_offer"] = {}
+        try:
+            _l["_script"] = marko_intel.generate_script(_l, sender_name=sender_name)
+        except Exception:
+            _l["_script"] = None
+        try:
+            _l["_sequence_state"] = marko_sequence.state_for(_l)
+        except Exception:
+            _l["_sequence_state"] = {}
+        try:
+            _brain = marko_brain.recommended_first_action(_l)
+            _brain["closability"] = marko_brain.closability_score(_l)
+            _brain["best_angle"] = marko_brain.best_angle(_l)
+            _l["_brain"] = _brain
+        except Exception:
+            _l["_brain"] = {}
 
     count_by_status = {}
     for l in leads:
@@ -244,8 +282,8 @@ def pipeline_view():
         count_by_status[s] = count_by_status.get(s, 0) + 1
 
     try:
-        pipeline_total = commands.pipeline_total(leads,
-                                                 statuses=("CONTACTED", "INTERESTED"))
+        pipeline_total = commands.pipeline_total(
+            leads, statuses=("CONTACTED", "INTERESTED"))
     except Exception:
         pipeline_total = 0
 
